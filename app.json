@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "Packr",
+    "slug": "Packr",
+    "scheme": "packr",                 // 👈 deep-link scheme
+    "platforms": ["ios","android","web"],
+    "web": { "bundler": "metro" }
+  }
+}
