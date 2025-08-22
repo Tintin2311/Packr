@@ -13,10 +13,8 @@ import {
   Platform,
   SafeAreaView,
 } from "react-native";
-import { Settings, Trophy, Flag, Heart, Gift } from "lucide-react-native";
+import { Trophy, Flag, Heart, Gift } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-
 
 /* ---------------- Utils ---------------- */
 const elementEmoji = (el: string) => {
@@ -261,7 +259,6 @@ const LikeProfileCard: React.FC<{
   const scale = appear.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] });
   const opacity = appear;
 
-  // boxShadow vs shadow* (évite les warnings sur Web)
   const webOrNativeShadow = Platform.select({
     web: ({ boxShadow: "0 15px 80px rgba(120,210,255,.45)" } as any),
     default: {
@@ -273,7 +270,6 @@ const LikeProfileCard: React.FC<{
     },
   });
 
-  // text shadow (évite warning Web)
   const webOrNativeTextShadow = Platform.select({
     web: ({ textShadow: "0px 1px 6px rgba(0,0,0,0.45)" } as any),
     default: {
@@ -309,7 +305,7 @@ const LikeProfileCard: React.FC<{
           )}
 
           <View style={styles.cardTextWrap}>
-            <Text style={[styles.cardName, webOrNativeTextShadow]}>{name}</Text>
+            <Text style={styles.cardName}>{name}</Text>
             <Text style={styles.cardElement}>
               {elementEmoji(element)} {element}
             </Text>
@@ -450,7 +446,6 @@ export default function AccueilConnected() {
       <View
         style={[
           styles.contentWrap,
-          // petit padding bas pour respirer sous la tabbar (gérée par React Navigation)
           { paddingBottom: 16 + Math.max(0, insets.bottom - 8) },
         ]}
       >
@@ -464,9 +459,7 @@ export default function AccueilConnected() {
             <Pressable onPress={() => setOpenLikes(true)} hitSlop={8} style={{ marginRight: 12 }}>
               <Heart size={24} color="#cbd5e1" />
             </Pressable>
-            <Pressable onPress={() => {}} hitSlop={8}>
-              <Settings size={24} color="#cbd5e1" />
-            </Pressable>
+            {/* Plus de bouton ⚙️ ici ; il vient du provider overlay */}
           </View>
         </View>
 
@@ -523,7 +516,6 @@ export default function AccueilConnected() {
         open={openElements}
         onPick={(el) => {
           setOpenElements(false);
-          // TODO: lancer l’animation d’ouverture + tirage selon l’élément choisi
         }}
         onClose={() => setOpenElements(false)}
       />

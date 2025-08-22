@@ -1,16 +1,18 @@
 // App.tsx
-import "react-native-gesture-handler"; // doit être la 1re ligne
+import "react-native-gesture-handler"; // doit rester tout en haut
 
 import React, { useEffect, useState } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import { NavigationContainer, DefaultTheme, type Theme } from "@react-navigation/native";
-import type { Session, AuthChangeEvent } from "@supabase/supabase-js";
+
 import { supabase } from "./SupabaseClient";
+import type { Session, AuthChangeEvent } from "@supabase/supabase-js";
 
 import AuthScreen from "./AuthScreen";
 import ResetPasswordScreen from "./ResetPasswordScreen";
 import AppTabs from "./navigation/AppTabs";
+import SettingsOverlayProvider from "./overlay/SettingsOverlay"; // <- calque paramètres
 
 // Thème sombre pour éviter le flash blanc
 const DarkTheme: Theme = {
@@ -57,6 +59,7 @@ export default function App() {
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       {!booted ? (
+        // Petit écran d'attente le temps de lire la session
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#0a0f14" }}>
           <ActivityIndicator />
         </View>
@@ -64,7 +67,10 @@ export default function App() {
         <ResetPasswordScreen onDone={() => setNeedsReset(false)} />
       ) : session ? (
         <NavigationContainer theme={DarkTheme}>
-          <AppTabs />
+          {/* Le bouton ⚙️ et le panneau coulissant sont gérés ici, par-dessus tout le contenu */}
+          <SettingsOverlayProvider>
+            <AppTabs />
+          </SettingsOverlayProvider>
         </NavigationContainer>
       ) : (
         <AuthScreen />
