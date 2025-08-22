@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+// screens/AccueilConnected.tsx
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -12,19 +13,10 @@ import {
   Platform,
   SafeAreaView,
 } from "react-native";
-import {
-  Home,
-  User,
-  Grid3x3,
-  MessageSquare,
-  Settings,
-  Trophy,
-  Flag,
-  Heart,
-  Gift,
-  ShoppingBag,
-} from "lucide-react-native";
+import { Settings, Trophy, Flag, Heart, Gift } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+
 
 /* ---------------- Utils ---------------- */
 const elementEmoji = (el: string) => {
@@ -48,9 +40,9 @@ const nativeDriver = Platform.OS !== "web"; // évite le warning Animated sur We
 const useScaleOnPress = () => {
   const scale = useRef(new Animated.Value(1)).current;
   const onPressIn = () =>
-    Animated.spring(scale, { toValue: 0.98, useNativeDriver: nativeDriver, friction: 7 }).start();
+    Animated.spring(scale, { toValue: 0.98, useNativeDriver: nativeDriver, friction: 7, tension: 170 }).start();
   const onPressOut = () =>
-    Animated.spring(scale, { toValue: 1, useNativeDriver: nativeDriver, friction: 6 }).start();
+    Animated.spring(scale, { toValue: 1, useNativeDriver: nativeDriver, friction: 6, tension: 170 }).start();
   return { scale, onPressIn, onPressOut };
 };
 
@@ -218,9 +210,9 @@ const ObjectivesSheet: React.FC<{ open: boolean; onClose: () => void }> = ({ ope
         </Pressable>
       </View>
 
-      <View style={{ rowGap: 12 }}>
+      <View>
         {missions.map((m) => (
-          <View key={m.title} style={styles.missionCard}>
+          <View key={m.title} style={[styles.missionCard, { marginBottom: 12 }]}>
             <Text style={styles.missionIcon}>{m.icon}</Text>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text numberOfLines={1} style={styles.missionTitle}>
@@ -260,10 +252,8 @@ const LikeProfileCard: React.FC<{
     Animated.spring(appear, {
       toValue: 1,
       useNativeDriver: nativeDriver,
-      // @ts-expect-error RN web ne tape pas ces props; c'est ok natif
-      stiffness: 140,
-      damping: 16,
-      mass: 0.8,
+      tension: 170,
+      friction: 16,
     }).start();
   }, [appear]);
 
@@ -332,7 +322,7 @@ const LikeProfileCard: React.FC<{
           accessibilityLabel="Refuser"
           onPress={onRefuse}
           disabled={disabled}
-          style={[styles.circleBtn, disabled ? styles.circleBtnDisabled : styles.circleBtnRed]}
+          style={[styles.circleBtn, { marginRight: 16 }, disabled ? styles.circleBtnDisabled : styles.circleBtnRed]}
         >
           <Text style={styles.circleBtnText}>✖️</Text>
         </Pressable>
@@ -411,7 +401,7 @@ const LikesSheet: React.FC<{ open: boolean; onClose: () => void }> = ({ open, on
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 4 }}
+        contentContainerStyle={{ paddingHorizontal: 4, paddingRight: 16 }}
         decelerationRate="fast"
         snapToAlignment="center"
         snapToInterval={Dimensions.get("window").width - 32}
@@ -440,37 +430,14 @@ const LikesSheet: React.FC<{ open: boolean; onClose: () => void }> = ({ open, on
   );
 };
 
-/* ---------------- Onglets placeholders ---------------- */
-const CardBlock: React.FC<{ title: string; subtitle: string }> = ({ title, subtitle }) => (
-  <View style={styles.cardSimple}>
-    <Text style={styles.simpleTitle}>{title}</Text>
-    <Text style={styles.simpleSubtitle}>{subtitle}</Text>
-  </View>
-);
-const ProfileTab = () => (
-  <CardBlock title="Mon profil" subtitle="Complète ta bio, photos et élément préféré." />
-);
-const CollectionTab = () => (
-  <CardBlock
-    title="Ma collection"
-    subtitle="Tes cartes sauvegardées s’affichent ici (classées par élément)."
-  />
-);
-const MessagesTab = () => (
-  <CardBlock title="Messagerie" subtitle="Retrouve tes matchs et conversations." />
-);
-
-/* ---------------- Page principale ---------------- */
+/* ---------------- Page principale (Home) ---------------- */
 export default function AccueilConnected() {
   const insets = useSafeAreaInsets();
-
   const user = { name: "Quentin" };
 
   const [openElements, setOpenElements] = useState(false);
   const [openObjectives, setOpenObjectives] = useState(false);
   const [openLikes, setOpenLikes] = useState(false);
-
-  const [tab, setTab] = useState<"home" | "profile" | "collection" | "messages" | "shop">("home");
 
   // Progression mock (bronze → argent)
   const currentMatches = 8;
@@ -480,11 +447,11 @@ export default function AccueilConnected() {
 
   return (
     <SafeAreaView style={styles.root}>
-      {/* Content */}
       <View
         style={[
           styles.contentWrap,
-          { paddingBottom: 88 + Math.max(0, insets.bottom - 8) },
+          // petit padding bas pour respirer sous la tabbar (gérée par React Navigation)
+          { paddingBottom: 16 + Math.max(0, insets.bottom - 8) },
         ]}
       >
         {/* Header */}
@@ -503,95 +470,52 @@ export default function AccueilConnected() {
           </View>
         </View>
 
-        {/* Tabs content */}
-        {tab === "home" && (
-          <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
-            {/* Progression + Objectifs */}
-            <View style={styles.cardSimple}>
-              <View style={styles.rowBetween}>
-                <View style={styles.rowCenter}>
-                  <Trophy size={20} color="#fff" />
-                  <Text style={[styles.progressTitle, { marginLeft: 8 }]}>
-                    Progression vers ARGENT
-                  </Text>
-                </View>
-                <Text style={styles.progressCount}>
-                  {currentMatches}/{nextThreshold}
-                </Text>
+        {/* Contenu */}
+        <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+          {/* Progression + Objectifs */}
+          <View style={styles.cardSimple}>
+            <View style={styles.rowBetween}>
+              <View style={styles.rowCenter}>
+                <Trophy size={20} color="#fff" />
+                <Text style={[styles.progressTitle, { marginLeft: 8 }]}>Progression vers ARGENT</Text>
               </View>
-
-              <View style={styles.progressBar}>
-                <View style={[styles.progressInner, { width: `${progressPct}%` }]} />
-              </View>
-              <Text style={styles.progressNote}>
-                Encore <Text style={styles.boldWhite}>{remaining}</Text> match
-                {remaining > 1 ? "s" : ""} pour atteindre
-                <Text style={styles.boldWhite}> ARGENT</Text>.
+              <Text style={styles.progressCount}>
+                {currentMatches}/{nextThreshold}
               </Text>
-
-              <View style={{ marginTop: 12 }}>
-                <Pressable style={styles.objectiveBtn} onPress={() => setOpenObjectives(true)}>
-                  <Flag size={16} color="#fff" />
-                  <Text style={styles.objectiveBtnText}>Voir les objectifs</Text>
-                </Pressable>
-              </View>
             </View>
 
-            {/* Boosters */}
-            <Text style={styles.sectionHint}>Choisis tes 3 boosters quotidiens.</Text>
+            <View style={styles.progressBar}>
+              <View style={[styles.progressInner, { width: `${progressPct}%` }]} />
+            </View>
+            <Text style={styles.progressNote}>
+              Encore <Text style={styles.boldWhite}>{remaining}</Text> match
+              {remaining > 1 ? "s" : ""} pour atteindre
+              <Text style={styles.boldWhite}> ARGENT</Text>.
+            </Text>
 
-            <BoosterCard
-              title="Éléments"
-              subtitle="Choisis parmi 10 éléments"
-              icon="🧪"
-              tone="blue"
-              onPress={() => setOpenElements(true)}
-            />
-            <View style={{ height: 12 }} />
-            <BoosterCard title="Aléatoire" subtitle="5 cartes · éléments variés" icon="🎲" tone="purple" />
-            <View style={{ height: 12 }} />
-            <BoosterCard title="Événement" subtitle="Aucun événement rejoint" icon="🎟️" tone="rose" disabled />
-          </ScrollView>
-        )}
-
-        {tab === "profile" && <ProfileTab />}
-        {tab === "collection" && <CollectionTab />}
-        {tab === "messages" && <MessagesTab />}
-        {tab === "shop" && (
-          <View>
-            <CardBlock
-              title="Boutique"
-              subtitle="Achète des boosters supplémentaires, skins exclusifs ou avantages partenaires."
-            />
-          </View>
-        )}
-      </View>
-
-      {/* Bottom bar — FIX: rangée horizontale + largeur égale + safe-area */}
-      <View
-        style={[
-          styles.bottomBar,
-          { paddingBottom: Math.max(8, insets.bottom) },
-        ]}
-      >
-        <View style={styles.tabsRow}>
-          {(
-            [
-              { id: "home", Icon: Home },
-              { id: "profile", Icon: User },
-              { id: "collection", Icon: Grid3x3 },
-              { id: "messages", Icon: MessageSquare },
-              { id: "shop", Icon: ShoppingBag },
-            ] as const
-          ).map(({ id, Icon }) => {
-            const active = tab === id;
-            return (
-              <Pressable key={id} style={styles.tabBtn} onPress={() => setTab(id as any)}>
-                <Icon size={28} color={active ? "#ffffff" : "#94a3b8"} />
+            <View style={{ marginTop: 12 }}>
+              <Pressable style={styles.objectiveBtn} onPress={() => setOpenObjectives(true)}>
+                <Flag size={16} color="#fff" />
+                <Text style={styles.objectiveBtnText}>Voir les objectifs</Text>
               </Pressable>
-            );
-          })}
-        </View>
+            </View>
+          </View>
+
+          {/* Boosters */}
+          <Text style={styles.sectionHint}>Choisis tes 3 boosters quotidiens.</Text>
+
+          <BoosterCard
+            title="Éléments"
+            subtitle="Choisis parmi 10 éléments"
+            icon="🧪"
+            tone="blue"
+            onPress={() => setOpenElements(true)}
+          />
+          <View style={{ height: 12 }} />
+          <BoosterCard title="Aléatoire" subtitle="5 cartes · éléments variés" icon="🎲" tone="purple" />
+          <View style={{ height: 12 }} />
+          <BoosterCard title="Événement" subtitle="Aucun événement rejoint" icon="🎟️" tone="rose" disabled />
+        </ScrollView>
       </View>
 
       {/* Sheets */}
@@ -723,7 +647,12 @@ const styles = StyleSheet.create({
   close: { fontSize: 20, color: "rgba(255,255,255,0.7)" },
 
   /* Elements grid */
-  grid2: { flexDirection: "row", flexWrap: "wrap", rowGap: 12, columnGap: 12 },
+  grid2: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    marginTop: 4,
+  },
   gridItem: {
     width: "48%",
     borderRadius: 12,
@@ -731,6 +660,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.12)",
     backgroundColor: "rgba(255,255,255,0.05)",
     padding: 12,
+    marginBottom: 12,
   },
   gridTitle: { fontSize: 15, fontWeight: "600", color: "#fff" },
   gridSub: { fontSize: 12, color: "rgba(255,255,255,0.7)", marginTop: 4 },
@@ -755,7 +685,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     marginLeft: 10,
   },
-  seeBtnText: { color: "#fff", fontSize: 12, fontWeight: "600" },
+  seeBtnText: { color: "rgba(255,255,255,0.95)", fontSize: 12, fontWeight: "600" },
 
   /* Likes */
   cardOuterGlow: {
@@ -807,7 +737,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    columnGap: 16,
   },
   circleBtn: {
     width: 44,
@@ -825,31 +754,4 @@ const styles = StyleSheet.create({
   /* Notes */
   smallNote: { marginBottom: 8, fontSize: 11, color: "rgba(255,255,255,0.8)" },
   smallNoteMuted: { marginTop: 10, fontSize: 11, color: "rgba(255,255,255,0.6)" },
-
-  /* Bottom bar (fix) */
-  bottomBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(255,255,255,0.12)",
-    backgroundColor: Platform.select({
-      web: "rgba(13,20,28,0.92)",
-      default: "rgba(13,20,28,0.95)",
-    }),
-    paddingTop: 4,
-  },
-  tabsRow: {
-    height: 64,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-around",
-  },
-  tabBtn: {
-    flex: 1,
-    height: 64,
-    alignItems: "center",
-    justifyContent: "center",
-  },
 });
