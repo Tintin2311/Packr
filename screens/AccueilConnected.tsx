@@ -13,7 +13,8 @@ import {
   Platform,
   SafeAreaView,
 } from "react-native";
-import { Trophy, Flag, Heart, Gift } from "lucide-react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Trophy, Flag } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /* ---------------- Utils ---------------- */
@@ -34,6 +35,7 @@ const elementEmoji = (el: string) => {
 };
 
 const nativeDriver = Platform.OS !== "web"; // évite le warning Animated sur Web
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 const useScaleOnPress = () => {
   const scale = useRef(new Animated.Value(1)).current;
@@ -53,17 +55,9 @@ type BoosterCardProps = {
   onPress?: () => void;
   tone?: "blue" | "purple" | "rose";
 };
-const BoosterCard: React.FC<BoosterCardProps> = ({
-  title,
-  subtitle,
-  icon,
-  disabled,
-  onPress,
-  tone = "blue",
-}) => {
+const BoosterCard: React.FC<BoosterCardProps> = ({ title, subtitle, icon, disabled, onPress, tone = "blue" }) => {
   const { scale, onPressIn, onPressOut } = useScaleOnPress();
-  const bg =
-    tone === "blue" ? styles.bgBlue : tone === "rose" ? styles.bgRose : styles.bgPurple;
+  const bg = tone === "blue" ? styles.bgBlue : tone === "rose" ? styles.bgRose : styles.bgPurple;
 
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
@@ -124,11 +118,11 @@ const useBottomSheetAnim = (open: boolean) => {
   return { translateY, overlay };
 };
 
-const BottomSheet: React.FC<{
-  open: boolean;
-  onClose: () => void;
-  children: React.ReactNode;
-}> = ({ open, onClose, children }) => {
+const BottomSheet: React.FC<{ open: boolean; onClose: () => void; children: React.ReactNode }> = ({
+  open,
+  onClose,
+  children,
+}) => {
   const { translateY, overlay } = useBottomSheetAnim(open);
   if (!open) return null;
 
@@ -151,18 +145,7 @@ const BottomSheet: React.FC<{
 /* ---------------- ElementsSheet ---------------- */
 const ElementsSheet: React.FC<{ open: boolean; onPick: (el: string) => void; onClose: () => void }> =
   ({ open, onPick, onClose }) => {
-    const elements = [
-      "Feu",
-      "Eau",
-      "Électricité",
-      "Plante",
-      "Glace",
-      "Pierre",
-      "Sol",
-      "Ténèbres",
-      "Lumière",
-      "Vent",
-    ];
+    const elements = ["Feu", "Eau", "Électricité", "Plante", "Glace", "Pierre", "Sol", "Ténèbres", "Lumière", "Vent"];
     return (
       <BottomSheet open={open} onClose={onClose}>
         <View style={styles.sheetHeader}>
@@ -230,202 +213,6 @@ const ObjectivesSheet: React.FC<{ open: boolean; onClose: () => void }> = ({ ope
   );
 };
 
-/* ---------------- Likes (cartes) ---------------- */
-type ProfileStatus = "pending" | "validated" | "gifted" | "refused";
-
-const LikeProfileCard: React.FC<{
-  name: string;
-  element: string;
-  photo: string;
-  status: ProfileStatus;
-  onValidate: () => void;
-  onRefuse: () => void;
-  onGift: () => void;
-  disableActions?: boolean;
-}> = ({ name, element, photo, status, onValidate, onRefuse, onGift, disableActions }) => {
-  const disabled = disableActions || status !== "pending";
-  const appear = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.spring(appear, {
-      toValue: 1,
-      useNativeDriver: nativeDriver,
-      tension: 170,
-      friction: 16,
-    }).start();
-  }, [appear]);
-
-  const rotateY = appear.interpolate({ inputRange: [0, 1], outputRange: ["60deg", "0deg"] });
-  const scale = appear.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] });
-  const opacity = appear;
-
-  const webOrNativeShadow = Platform.select({
-    web: ({ boxShadow: "0 15px 80px rgba(120,210,255,.45)" } as any),
-    default: {
-      shadowColor: "#78d2ff",
-      shadowOpacity: 0.4,
-      shadowRadius: 20,
-      shadowOffset: { width: 0, height: 10 },
-      elevation: 6,
-    },
-  });
-
-  const webOrNativeTextShadow = Platform.select({
-    web: ({ textShadow: "0px 1px 6px rgba(0,0,0,0.45)" } as any),
-    default: {
-      textShadowColor: "rgba(0,0,0,0.45)",
-      textShadowOffset: { width: 0, height: 1 },
-      textShadowRadius: 6,
-    },
-  });
-
-  return (
-    <Animated.View style={{ transform: [{ rotateY }, { scale }], opacity }}>
-      <View style={styles.cardOuterGlow}>
-        <View style={[styles.likeCard, webOrNativeShadow]}>
-          <Pressable
-            onPress={onGift}
-            disabled={disabled}
-            style={[styles.giftBtn, disabled ? styles.giftBtnDisabled : styles.giftBtnEnabled]}
-          >
-            <Gift size={14} color="#fff" />
-            <Text style={styles.giftText}> Offrir</Text>
-          </Pressable>
-
-          <View style={{ height: 300, width: "100%" }}>
-            <Image source={{ uri: photo }} style={styles.photo} resizeMode="cover" />
-          </View>
-
-          {status !== "pending" && (
-            <View style={styles.statusBadge}>
-              <Text style={styles.statusText}>
-                {status === "validated" ? "Match validé" : status === "gifted" ? "Carte offerte" : "Refusé"}
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.cardTextWrap}>
-            <Text style={styles.cardName}>{name}</Text>
-            <Text style={styles.cardElement}>
-              {elementEmoji(element)} {element}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.actionsRow}>
-        <Pressable
-          accessibilityLabel="Refuser"
-          onPress={onRefuse}
-          disabled={disabled}
-          style={[styles.circleBtn, { marginRight: 16 }, disabled ? styles.circleBtnDisabled : styles.circleBtnRed]}
-        >
-          <Text style={styles.circleBtnText}>✖️</Text>
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Valider"
-          onPress={onValidate}
-          disabled={disabled}
-          style={[styles.circleBtn, disabled ? styles.circleBtnDisabled : styles.circleBtnGreen]}
-        >
-          <Text style={styles.circleBtnText}>✔️</Text>
-        </Pressable>
-      </View>
-    </Animated.View>
-  );
-};
-
-const LikesSheet: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => {
-  const [weeklyGiftsLeft, setWeeklyGiftsLeft] = useState(1);
-  const [people, setPeople] = useState<
-    Array<{ id: number; name: string; element: string; photo: string; status: ProfileStatus }>
-  >([
-    {
-      id: 1,
-      name: "Lina, 24",
-      element: "Eau",
-      photo:
-        "https://images.unsplash.com/photo-1554151228-14d9def656e4?q=80&w=800&auto=format&fit=crop",
-      status: "pending",
-    },
-    {
-      id: 2,
-      name: "Noa, 26",
-      element: "Feu",
-      photo:
-        "https://images.unsplash.com/photo-1549351512-c5e12b12c6b5?q=80&w=800&auto=format&fit=crop",
-      status: "pending",
-    },
-    {
-      id: 3,
-      name: "Maya, 27",
-      element: "Plante",
-      photo:
-        "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=800&auto=format&fit=crop",
-      status: "pending",
-    },
-  ]);
-
-  const validateMatch = (id: number) =>
-    setPeople((arr) => arr.map((p) => (p.id === id ? { ...p, status: "validated" } : p)));
-  const refuseMatch = (id: number) =>
-    setPeople((arr) => arr.map((p) => (p.id === id ? { ...p, status: "refused" } : p)));
-  const giftCard = (id: number) => {
-    if (weeklyGiftsLeft <= 0) return;
-    setWeeklyGiftsLeft((n) => n - 1);
-    setPeople((arr) => arr.map((p) => (p.id === id ? { ...p, status: "gifted" } : p)));
-  };
-
-  return (
-    <BottomSheet open={open} onClose={onClose}>
-      <View style={styles.sheetHeader}>
-        <View style={styles.rowCenter}>
-          <Heart size={20} color="#fff" />
-          <Text style={[styles.sheetTitle, { marginLeft: 8 }]}>Ils ont choisi ta carte</Text>
-        </View>
-        <Pressable onPress={onClose}>
-          <Text style={styles.close}>✕</Text>
-        </Pressable>
-      </View>
-
-      <Text style={styles.smallNote}>
-        Valide (✔️) pour créer un match et discuter. Refuse (✖️) pour ignorer. Tu peux{" "}
-        <Text style={{ fontWeight: "700", color: "#fff" }}>offrir ta carte</Text> 1x/sem via{" "}
-        <Text style={{ fontWeight: "700", color: "#fff" }}>🎁 Offrir</Text>.
-      </Text>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 4, paddingRight: 16 }}
-        decelerationRate="fast"
-        snapToAlignment="center"
-        snapToInterval={Dimensions.get("window").width - 32}
-      >
-        {people.map((p) => (
-          <View key={p.id} style={{ width: Dimensions.get("window").width - 32, maxWidth: 420, marginRight: 20 }}>
-            <LikeProfileCard
-              name={p.name}
-              element={p.element}
-              photo={p.photo}
-              status={p.status}
-              onValidate={() => validateMatch(p.id)}
-              onRefuse={() => refuseMatch(p.id)}
-              onGift={() => giftCard(p.id)}
-              disableActions={p.status !== "pending"}
-            />
-          </View>
-        ))}
-      </ScrollView>
-
-      <Text style={styles.smallNoteMuted}>
-        Super match restant cette semaine :{" "}
-        <Text style={{ color: "#fff", fontWeight: "700" }}>{weeklyGiftsLeft}</Text>/1
-      </Text>
-    </BottomSheet>
-  );
-};
-
 /* ---------------- Page principale (Home) ---------------- */
 export default function AccueilConnected() {
   const insets = useSafeAreaInsets();
@@ -433,7 +220,6 @@ export default function AccueilConnected() {
 
   const [openElements, setOpenElements] = useState(false);
   const [openObjectives, setOpenObjectives] = useState(false);
-  const [openLikes, setOpenLikes] = useState(false);
 
   // Progression mock (bronze → argent)
   const currentMatches = 8;
@@ -443,6 +229,41 @@ export default function AccueilConnected() {
 
   return (
     <SafeAreaView style={styles.root}>
+      {/* ===== Fond AURORA identique à Auth ===== */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <LinearGradient
+          colors={["#0a0f14", "#0d141c"]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={[styles.blob, { top: -80, left: -60, transform: [{ rotate: "15deg" }] }]}>
+          <LinearGradient
+            colors={["#1d4ed8", "transparent"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+        <View style={[styles.blob, { bottom: -90, right: -30, transform: [{ rotate: "-20deg" }] }]}>
+          <LinearGradient
+            colors={["#22c55e", "transparent"]}
+            start={{ x: 1, y: 1 }}
+            end={{ x: 0, y: 0 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+        <View style={[styles.blob, { top: 160, right: -60, transform: [{ rotate: "30deg" }] }]}>
+          <LinearGradient
+            colors={["#e11d48", "transparent"]}
+            start={{ x: 1, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+      </View>
+      {/* ======================================= */}
+
       <View
         style={[
           styles.contentWrap,
@@ -455,12 +276,8 @@ export default function AccueilConnected() {
             <Text style={styles.greeting}>Bonjour</Text>
             <Text style={styles.username}>{user.name}</Text>
           </View>
-          <View style={styles.headerActions}>
-            <Pressable onPress={() => setOpenLikes(true)} hitSlop={8} style={{ marginRight: 12 }}>
-              <Heart size={24} color="#cbd5e1" />
-            </Pressable>
-            {/* Plus de bouton ⚙️ ici ; il vient du provider overlay */}
-          </View>
+          {/* vide : icônes gérées par les overlays globaux */}
+          <View style={styles.headerActions} />
         </View>
 
         {/* Contenu */}
@@ -514,13 +331,13 @@ export default function AccueilConnected() {
       {/* Sheets */}
       <ElementsSheet
         open={openElements}
-        onPick={(el) => {
+        onPick={() => {
           setOpenElements(false);
+          // TODO: lancer l’animation d’ouverture + tirage selon l’élément choisi
         }}
         onClose={() => setOpenElements(false)}
       />
       <ObjectivesSheet open={openObjectives} onClose={() => setOpenObjectives(false)} />
-      <LikesSheet open={openLikes} onClose={() => setOpenLikes(false)} />
     </SafeAreaView>
   );
 }
@@ -531,6 +348,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#0a0f14",
   },
+
+  // ===== blobs aurora (mêmes valeurs que Auth) =====
+  blob: {
+    position: "absolute",
+    width: SCREEN_WIDTH * 0.9,
+    height: SCREEN_WIDTH * 0.9,
+    borderRadius: 999,
+    opacity: 0.15,
+  },
+
   contentWrap: {
     flex: 1,
     width: "100%",
@@ -572,8 +399,6 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 12,
   },
-  simpleTitle: { fontSize: 16, color: "#fff", fontWeight: "600", marginBottom: 6 },
-  simpleSubtitle: { fontSize: 13, color: "rgba(255,255,255,0.7)" },
 
   /* Progress */
   rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
@@ -587,11 +412,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.12)",
     overflow: "hidden",
   },
-  progressInner: {
-    height: "100%",
-    backgroundColor: "#facc15",
-    borderRadius: 999,
-  },
+  progressInner: { height: "100%", backgroundColor: "#facc15", borderRadius: 999 },
   progressNote: { marginTop: 4, fontSize: 12, color: "rgba(255,255,255,0.7)" },
   boldWhite: { color: "#fff", fontWeight: "700" },
 
@@ -612,10 +433,7 @@ const styles = StyleSheet.create({
   sectionHint: { fontSize: 13, color: "rgba(255,255,255,0.7)", marginBottom: 8 },
 
   /* Sheet */
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.6)",
-  },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
   sheet: {
     position: "absolute",
     left: 0,
@@ -678,72 +496,4 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   seeBtnText: { color: "rgba(255,255,255,0.95)", fontSize: 12, fontWeight: "600" },
-
-  /* Likes */
-  cardOuterGlow: {
-    borderRadius: 18,
-    padding: 3,
-    backgroundColor: "rgba(141, 214, 255, 0.25)",
-  },
-  likeCard: {
-    borderRadius: 14,
-    overflow: "hidden",
-    backgroundColor: "#071018",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(168,228,255,.4)",
-  },
-  giftBtn: {
-    position: "absolute",
-    right: 10,
-    top: 10,
-    zIndex: 10,
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  giftBtnEnabled: { backgroundColor: "#f43f5e" },
-  giftBtnDisabled: { backgroundColor: "rgba(255,255,255,0.1)" },
-  giftText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-
-  photo: { width: "100%", height: "100%" },
-  cardTextWrap: { position: "absolute", left: 16, right: 16, bottom: 20 },
-  cardName: { color: "#fff", fontSize: 22, fontWeight: "700" },
-  cardElement: { color: "rgba(255,255,255,0.85)", fontSize: 13 },
-  statusBadge: {
-    position: "absolute",
-    left: 10,
-    top: 10,
-    borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.15)",
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  statusText: { color: "rgba(255,255,255,0.85)", fontSize: 11 },
-
-  actionsRow: {
-    marginTop: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  circleBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-  },
-  circleBtnText: { fontSize: 16, color: "#fff" },
-  circleBtnRed: { borderColor: "rgba(248,113,113,0.6)" },
-  circleBtnGreen: { borderColor: "rgba(52,211,153,0.6)" },
-  circleBtnDisabled: { borderColor: "rgba(255,255,255,0.12)", opacity: 0.45 },
-
-  /* Notes */
-  smallNote: { marginBottom: 8, fontSize: 11, color: "rgba(255,255,255,0.8)" },
-  smallNoteMuted: { marginTop: 10, fontSize: 11, color: "rgba(255,255,255,0.6)" },
 });
