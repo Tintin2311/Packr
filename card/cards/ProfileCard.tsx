@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Image,
   Platform,
+  Pressable,
   type NativeSyntheticEvent,
   type TextInputContentSizeChangeEventData,
 } from 'react-native';
@@ -40,11 +41,22 @@ type Props = {
   displayName: string;
   age?: number | null;
   city?: string;
-  reason?: string;          // uniquement la suite (sans le préfixe)
+
+  /** Texte saisi (suite du préfixe). Si absent, on utilisera `description`. */
+  reason?: string;
+
+  /** Alias pratique pour Supabase : s’affiche s’il n’y a pas `reason`. */
+  description?: string;
+
   size?: number;            // largeur carte
   editable?: boolean;       // activer/désactiver l’édition
-  rarity?: Rarity;       // bordure BRONZE/ARGENT/DIAMANT/LEGEND
+  rarity?: Rarity;          // bordure BRONZE/ARGENT/DIAMANT/LEGEND
+
   onChangeReason?: (txt: string) => void;
+
+  /** Clic strictement limité à la zone photo */
+  onPhotoPress?: () => void;
+  photoHitSlop?: number | { top?: number; bottom?: number; left?: number; right?: number };
 };
 
 export default function ProfileCard({
@@ -53,11 +65,14 @@ export default function ProfileCard({
   displayName,
   age,
   city,
-  reason = '',
+  reason,
+  description,            // <<< NOUVEAU
   size = CARD_W,
   editable = true,
   rarity = 'bronze',
   onChangeReason,
+  onPhotoPress,           // <<< NOUVEAU
+  photoHitSlop,           // <<< NOUVEAU
 }: Props) {
   /* --- Dimensions carte --- */
   const width = size;
@@ -96,7 +111,8 @@ export default function ProfileCard({
   const inputFixedHeight = inputMaxLines * REASON_LINE_HEIGHT;
 
   /* --- Saisie protégée (jamais d’effacement total) --- */
-  const [text, setText] = useState(reason);
+  const initialText = (reason ?? description ?? ''); // <<< priorité à reason, sinon description
+  const [text, setText] = useState(initialText);
   const [atCapacity, setAtCapacity] = useState(false);
   const acceptedRef = useRef(text);    // dernier texte valide
   const prevRef = useRef(text);        // snapshot avant la frappe
@@ -109,13 +125,14 @@ export default function ProfileCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputMaxLines]);
 
-  // autoriser la prop “reason” à hydrater
+  // hydrate à partir de reason/description (pour affichage Supabase)
   useEffect(() => {
-    setText(reason);
-    acceptedRef.current = reason;
-    prevRef.current = reason;
+    const base = (reason ?? description ?? '');
+    setText(base);
+    acceptedRef.current = base;
+    prevRef.current = base;
     setAtCapacity(false);
-  }, [reason]);
+  }, [reason, description]);
 
   const onChangeText = useCallback(
     (next: string) => {
@@ -192,19 +209,29 @@ export default function ProfileCard({
           </View>
         </View>
 
-        {/* Zone photo */}
+        {/* Zone photo — Pressable strictement limité à la zone */}
         <View style={{ height: mediaH, paddingHorizontal: 8, paddingBottom: 8, paddingTop: 4 }}>
-          {avatarUrl ? (
-            <Image
-              source={{ uri: avatarUrl }}
-              resizeMode="cover"
-              style={{ flex: 1, borderRadius: 12, width: '100%', borderWidth: StyleSheet.hairlineWidth, borderColor }}
-            />
-          ) : (
-            <View style={[styles.photoPh, { borderColor }]}>
-              <Text style={{ color: '#eedfd7' }}>Photo ?</Text>
-            </View>
-          )}
+          <Pressable
+            disabled={!onPhotoPress}
+            onPress={onPhotoPress}
+            hitSlop={
+              photoHitSlop ??
+              { top: 4, bottom: 4, left: 4, right: 4 } // zone de clic discrète
+            }
+            style={{ flex: 1, borderRadius: 12, overflow: 'hidden' }}
+          >
+            {avatarUrl ? (
+              <Image
+                source={{ uri: avatarUrl }}
+                resizeMode="cover"
+                style={{ flex: 1, borderRadius: 12, width: '100%', borderWidth: StyleSheet.hairlineWidth, borderColor }}
+              />
+            ) : (
+              <View style={[styles.photoPh, { borderColor }]}>
+                <Text style={{ color: '#eedfd7' }}>Photo ?</Text>
+              </View>
+            )}
+          </Pressable>
         </View>
 
         {/* Bas de carte */}
@@ -212,37 +239,51 @@ export default function ProfileCard({
           <Text style={styles.name}>{displayName || 'Moi'}</Text>
           {!!meta && <Text style={styles.meta}>{meta}</Text>}
 
-          {/* Encadré raison : pas de Pressable qui vole le focus — le TextInput est directement interactif */}
+          {/* Encadré raison */}
           <View style={styles.reasonBox}>
             <View style={{ width: usableWidthInsideBox }}>
               <Text style={[styles.prefix, WEB_TEXT]} onTextLayout={onPrefixLayout}>
                 {prefix}
               </Text>
 
-              <TextInput
-                value={text}
-                onChangeText={onChangeText}
-                onContentSizeChange={onContentSizeChange}
-                onKeyPress={onKeyPress}
-                editable={editable}
-                multiline
-                numberOfLines={inputMaxLines}       // hauteur visuelle fixée
-                scrollEnabled={false}
-                style={[
-                  styles.reasonInput,
-                  WEB_TEXT,
-                  {
-                    width: usableWidthInsideBox,
-                    height: inputFixedHeight,
-                    maxHeight: inputFixedHeight,
-                    overflow: 'hidden',
-                  },
-                  Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : undefined,
-                  atCapacity ? { borderColor, borderWidth: 1 } : null,
-                ]}
-                placeholder="Écrivez ici…"
-                placeholderTextColor={atCapacity ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.6)'}
-              />
+              {/* Si non editable, on affiche un <Text> simple pour un rendu plus propre */}
+              {editable ? (
+                <TextInput
+                  value={text}
+                  onChangeText={onChangeText}
+                  onContentSizeChange={onContentSizeChange}
+                  onKeyPress={onKeyPress}
+                  editable
+                  multiline
+                  numberOfLines={inputMaxLines}       // hauteur visuelle fixée
+                  scrollEnabled={false}
+                  style={[
+                    styles.reasonInput,
+                    WEB_TEXT,
+                    {
+                      width: usableWidthInsideBox,
+                      height: inputFixedHeight,
+                      maxHeight: inputFixedHeight,
+                      overflow: 'hidden',
+                    },
+                    Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : undefined,
+                    atCapacity ? { borderColor, borderWidth: 1 } : null,
+                  ]}
+                  placeholder="Écrivez ici…"
+                  placeholderTextColor={atCapacity ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.6)'}
+                />
+              ) : (
+                <Text
+                  style={[
+                    styles.reasonReadonly,
+                    WEB_TEXT,
+                    { width: usableWidthInsideBox, minHeight: inputFixedHeight, lineHeight: REASON_LINE_HEIGHT },
+                  ]}
+                  numberOfLines={inputMaxLines}
+                >
+                  {text?.trim().length ? text : 'Écrivez ici…'}
+                </Text>
+              )}
             </View>
           </View>
 
@@ -322,5 +363,11 @@ const styles = StyleSheet.create({
     paddingLeft: 0,
     backgroundColor: 'transparent',
     borderWidth: 0,
+  },
+  reasonReadonly: {
+    color: '#ffffff',
+    fontSize: REASON_FONT_SIZE,
+    fontFamily: FONT_FAMILY,
+    opacity: 0.95,
   },
 });

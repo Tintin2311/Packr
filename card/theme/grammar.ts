@@ -2,8 +2,8 @@
 import type { ElementKey } from './elements';
 
 type Grammar = {
-  article: string;     // "Le", "La", "L'", "Les"
-  noun: string;        // feu, eau, ...
+  article: string;
+  noun: string;
   apostrophe?: boolean;
   plural?: boolean;
 };
