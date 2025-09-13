@@ -5,7 +5,6 @@ import {
   Text,
   Pressable,
   StyleSheet,
-  Image,
   ScrollView,
   Dimensions,
   Animated,
@@ -16,6 +15,8 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Trophy, Flag } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import SettingsOverlayProvider, { SettingsFab } from "../overlay/SettingsOverlay";
+import LikesOverlayProvider, { LikesFab } from "../overlay/LikesOverlay";
 
 /* ---------------- Utils ---------------- */
 const elementEmoji = (el: string) => {
@@ -34,8 +35,8 @@ const elementEmoji = (el: string) => {
   return map[el] ?? "⭐";
 };
 
-const nativeDriver = Platform.OS !== "web"; // évite le warning Animated sur Web
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const nativeDriver = Platform.OS !== "web";
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 const useScaleOnPress = () => {
   const scale = useRef(new Animated.Value(1)).current;
@@ -213,7 +214,7 @@ const ObjectivesSheet: React.FC<{ open: boolean; onClose: () => void }> = ({ ope
   );
 };
 
-/* ---------------- Page principale (Home) ---------------- */
+/* ---------------- Page principale ---------------- */
 export default function AccueilConnected() {
   const insets = useSafeAreaInsets();
   const user = { name: "Quentin" };
@@ -221,124 +222,92 @@ export default function AccueilConnected() {
   const [openElements, setOpenElements] = useState(false);
   const [openObjectives, setOpenObjectives] = useState(false);
 
-  // Progression mock (bronze → argent)
   const currentMatches = 8;
   const nextThreshold = 10;
   const remaining = Math.max(0, nextThreshold - currentMatches);
   const progressPct = Math.min(100, Math.round((currentMatches / nextThreshold) * 100));
 
   return (
-    <SafeAreaView style={styles.root}>
-      {/* ===== Fond AURORA identique à Auth ===== */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <LinearGradient
-          colors={["#0a0f14", "#0d141c"]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={[styles.blob, { top: -80, left: -60, transform: [{ rotate: "15deg" }] }]}>
-          <LinearGradient
-            colors={["#1d4ed8", "transparent"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </View>
-        <View style={[styles.blob, { bottom: -90, right: -30, transform: [{ rotate: "-20deg" }] }]}>
-          <LinearGradient
-            colors={["#22c55e", "transparent"]}
-            start={{ x: 1, y: 1 }}
-            end={{ x: 0, y: 0 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </View>
-        <View style={[styles.blob, { top: 160, right: -60, transform: [{ rotate: "30deg" }] }]}>
-          <LinearGradient
-            colors={["#e11d48", "transparent"]}
-            start={{ x: 1, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </View>
-      </View>
-      {/* ======================================= */}
-
-      <View
-        style={[
-          styles.contentWrap,
-          { paddingBottom: 16 + Math.max(0, insets.bottom - 8) },
-        ]}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>Bonjour</Text>
-            <Text style={styles.username}>{user.name}</Text>
+    <SettingsOverlayProvider>
+      <LikesOverlayProvider>
+        <SafeAreaView style={styles.root}>
+          {/* Fond Aurora */}
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <LinearGradient
+              colors={["#0a0f14", "#0d141c"]}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={[styles.blob, { top: -80, left: -60, transform: [{ rotate: "15deg" }] }]}>
+              <LinearGradient colors={["#1d4ed8", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+            </View>
+            <View style={[styles.blob, { bottom: -90, right: -30, transform: [{ rotate: "-20deg" }] }]}>
+              <LinearGradient colors={["#22c55e", "transparent"]} start={{ x: 1, y: 1 }} end={{ x: 0, y: 0 }} style={StyleSheet.absoluteFill} />
+            </View>
+            <View style={[styles.blob, { top: 160, right: -60, transform: [{ rotate: "30deg" }] }]}>
+              <LinearGradient colors={["#e11d48", "transparent"]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+            </View>
           </View>
-          {/* vide : icônes gérées par les overlays globaux */}
-          <View style={styles.headerActions} />
-        </View>
 
-        {/* Contenu */}
-        <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
-          {/* Progression + Objectifs */}
-          <View style={styles.cardSimple}>
-            <View style={styles.rowBetween}>
-              <View style={styles.rowCenter}>
-                <Trophy size={20} color="#fff" />
-                <Text style={[styles.progressTitle, { marginLeft: 8 }]}>Progression vers ARGENT</Text>
+          <View style={[styles.contentWrap, { paddingBottom: 16 + Math.max(0, insets.bottom - 8) }]}>
+            {/* Header */}
+            <View style={styles.header}>
+              <View>
+                <Text style={styles.greeting}>Bonjour</Text>
+                <Text style={styles.username}>{user.name}</Text>
               </View>
-              <Text style={styles.progressCount}>
-                {currentMatches}/{nextThreshold}
-              </Text>
             </View>
 
-            <View style={styles.progressBar}>
-              <View style={[styles.progressInner, { width: `${progressPct}%` }]} />
-            </View>
-            <Text style={styles.progressNote}>
-              Encore <Text style={styles.boldWhite}>{remaining}</Text> match
-              {remaining > 1 ? "s" : ""} pour atteindre
-              <Text style={styles.boldWhite}> ARGENT</Text>.
-            </Text>
+            {/* Contenu */}
+            <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+              <View style={styles.cardSimple}>
+                <View style={styles.rowBetween}>
+                  <View style={styles.rowCenter}>
+                    <Trophy size={20} color="#fff" />
+                    <Text style={[styles.progressTitle, { marginLeft: 8 }]}>Progression vers ARGENT</Text>
+                  </View>
+                  <Text style={styles.progressCount}>
+                    {currentMatches}/{nextThreshold}
+                  </Text>
+                </View>
+                <View style={styles.progressBar}>
+                  <View style={[styles.progressInner, { width: `${progressPct}%` }]} />
+                </View>
+                <Text style={styles.progressNote}>
+                  Encore <Text style={styles.boldWhite}>{remaining}</Text> match{remaining > 1 ? "s" : ""} pour atteindre
+                  <Text style={styles.boldWhite}> ARGENT</Text>.
+                </Text>
+                <View style={{ marginTop: 12 }}>
+                  <Pressable style={styles.objectiveBtn} onPress={() => setOpenObjectives(true)}>
+                    <Flag size={16} color="#fff" />
+                    <Text style={styles.objectiveBtnText}>Voir les objectifs</Text>
+                  </Pressable>
+                </View>
+              </View>
 
-            <View style={{ marginTop: 12 }}>
-              <Pressable style={styles.objectiveBtn} onPress={() => setOpenObjectives(true)}>
-                <Flag size={16} color="#fff" />
-                <Text style={styles.objectiveBtnText}>Voir les objectifs</Text>
-              </Pressable>
-            </View>
+              {/* Boosters */}
+              <Text style={styles.sectionHint}>Choisis tes 3 boosters quotidiens.</Text>
+              <BoosterCard title="Éléments" subtitle="Choisis parmi 10 éléments" icon="🧪" tone="blue" onPress={() => setOpenElements(true)} />
+              <View style={{ height: 12 }} />
+              <BoosterCard title="Aléatoire" subtitle="5 cartes · éléments variés" icon="🎲" tone="purple" />
+              <View style={{ height: 12 }} />
+              <BoosterCard title="Événement" subtitle="Aucun événement rejoint" icon="🎟️" tone="rose" disabled />
+            </ScrollView>
           </View>
 
-          {/* Boosters */}
-          <Text style={styles.sectionHint}>Choisis tes 3 boosters quotidiens.</Text>
+          {/* Sheets */}
+          <ElementsSheet open={openElements} onPick={() => setOpenElements(false)} onClose={() => setOpenElements(false)} />
+          <ObjectivesSheet open={openObjectives} onClose={() => setOpenObjectives(false)} />
 
-          <BoosterCard
-            title="Éléments"
-            subtitle="Choisis parmi 10 éléments"
-            icon="🧪"
-            tone="blue"
-            onPress={() => setOpenElements(true)}
-          />
-          <View style={{ height: 12 }} />
-          <BoosterCard title="Aléatoire" subtitle="5 cartes · éléments variés" icon="🎲" tone="purple" />
-          <View style={{ height: 12 }} />
-          <BoosterCard title="Événement" subtitle="Aucun événement rejoint" icon="🎟️" tone="rose" disabled />
-        </ScrollView>
-      </View>
-
-      {/* Sheets */}
-      <ElementsSheet
-        open={openElements}
-        onPick={() => {
-          setOpenElements(false);
-          // TODO: lancer l’animation d’ouverture + tirage selon l’élément choisi
-        }}
-        onClose={() => setOpenElements(false)}
-      />
-      <ObjectivesSheet open={openObjectives} onClose={() => setOpenObjectives(false)} />
-    </SafeAreaView>
+          {/* FABs alignés en row */}
+          <View pointerEvents="box-none" style={[styles.fabsRow, { paddingTop: insets.top }]}>
+            <LikesFab style={{ position: "relative", top: undefined, right: undefined, marginRight: 8 }} />
+            <SettingsFab style={{ position: "relative", top: undefined, right: undefined }} />
+          </View>
+        </SafeAreaView>
+      </LikesOverlayProvider>
+    </SettingsOverlayProvider>
   );
 }
 
@@ -349,11 +318,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#0a0f14",
   },
 
-  // ===== blobs aurora (mêmes valeurs que Auth) =====
+  // blobs aurora
   blob: {
     position: "absolute",
-    width: SCREEN_WIDTH * 0.9,
-    height: SCREEN_WIDTH * 0.9,
+    width: Dimensions.get("window").width * 0.9,
+    height: Dimensions.get("window").width * 0.9,
     borderRadius: 999,
     opacity: 0.15,
   },
@@ -366,6 +335,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
   },
+
   header: {
     marginBottom: 16,
     flexDirection: "row",
@@ -373,7 +343,6 @@ const styles = StyleSheet.create({
   },
   greeting: { fontSize: 12, color: "rgba(255,255,255,0.7)" },
   username: { fontSize: 16, color: "#fff", fontWeight: "600" },
-  headerActions: { marginLeft: "auto", flexDirection: "row", alignItems: "center" },
 
   /* Cards */
   card: {
@@ -416,6 +385,8 @@ const styles = StyleSheet.create({
   progressNote: { marginTop: 4, fontSize: 12, color: "rgba(255,255,255,0.7)" },
   boldWhite: { color: "#fff", fontWeight: "700" },
 
+  sectionHint: { fontSize: 13, color: "rgba(255,255,255,0.7)", marginBottom: 8 },
+
   objectiveBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -428,9 +399,6 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   objectiveBtnText: { color: "#fff", fontSize: 12, fontWeight: "600", marginLeft: 6 },
-
-  /* Section label */
-  sectionHint: { fontSize: 13, color: "rgba(255,255,255,0.7)", marginBottom: 8 },
 
   /* Sheet */
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
@@ -496,4 +464,15 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   seeBtnText: { color: "rgba(255,255,255,0.95)", fontSize: 12, fontWeight: "600" },
+
+  /* FABs alignés */
+  fabsRow: {
+    position: "absolute",
+    top: 0,
+    right: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    // Si RN >= 0.71 tu peux activer gap:
+    // gap: 8,
+  },
 });

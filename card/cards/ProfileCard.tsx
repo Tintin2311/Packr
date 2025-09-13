@@ -14,49 +14,64 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { ELEMENTS, type ElementKey } from '../theme/elements';
 import { GRAMMAR } from '../theme/grammar';
-import { RARITY, type Rarity } from '../theme/rarity';
+import { type Rarity } from '../theme/rarity';
+import RarityBorder from '../theme/RarityBorder';
 
-/* --- Constantes visuelles --- */
+/* ===== Réglages ===== */
+const MEDIA_RATIO   = 0.46; // hauteur de la zone media (0–1)
+const PHOTO_PADDING = 8;    // padding horizontal autour de la photo (px)
+/** + = on RÉTRÉCIT la zone cliquable depuis les bords, - = on l'AGRANDIT */
+const TOUCH_INSET   = { top: 1, right: 1, bottom: 1, left: 1 };
+/** Laisse à true le temps d’ajuster visuellement la zone. */
+const DEBUG_TOUCH_SHOW = true;
+
+/* ===== Dimensions / typo ===== */
 const CARD_W = 300;
 const CARD_H = 500;
-const MEDIA_RATIO = 0.42;           // hauteur zone photo
 const PAD_SIDE = 10;
+
+const FRAME_RADIUS = 16;
+const FRAME_STROKE = 2;
+const FRAME_INSET = 0;
 
 const REASON_FONT_SIZE = 13;
 const REASON_LINE_HEIGHT = 19;
-const TOTAL_LINES_MAX = 6;          // Préfixe + saisie
+const TOTAL_LINES_MAX = 6;
 
 const FONT_FAMILY =
-  Platform.select({ ios: 'System', android: 'sans-serif', web: 'system-ui', default: 'system-ui' }) || undefined;
+  Platform.select({ ios: 'System', android: 'sans-serif', web: 'system-ui', default: 'system-ui' }) ||
+  undefined;
 
 const WEB_TEXT: any =
   Platform.OS === 'web'
     ? { wordBreak: 'break-word', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }
     : null;
 
-/* --- Props --- */
+/* Asset décor “Eau” */
+const EAU_BG_URL =
+  'https://crckgttdlrrebswkvoor.supabase.co/storage/v1/object/public/images/carte%20design/fondEau.png';
+
+type Insets = { top?: number; right?: number; bottom?: number; left?: number };
+
 type Props = {
   element: ElementKey;
   avatarUrl?: string;
   displayName: string;
   age?: number | null;
   city?: string;
-
-  /** Texte saisi (suite du préfixe). Si absent, on utilisera `description`. */
   reason?: string;
-
-  /** Alias pratique pour Supabase : s’affiche s’il n’y a pas `reason`. */
   description?: string;
 
-  size?: number;            // largeur carte
-  editable?: boolean;       // activer/désactiver l’édition
-  rarity?: Rarity;          // bordure BRONZE/ARGENT/DIAMANT/LEGEND
+  size?: number;
+  editable?: boolean;
+  rarity?: Rarity;
 
   onChangeReason?: (txt: string) => void;
-
-  /** Clic strictement limité à la zone photo */
   onPhotoPress?: () => void;
-  photoHitSlop?: number | { top?: number; bottom?: number; left?: number; right?: number };
+
+  mediaRatio?: number;
+  photoPadding?: number;
+  touchInset?: Insets; // + = rétrécir, - = agrandir
 };
 
 export default function ProfileCard({
@@ -66,25 +81,29 @@ export default function ProfileCard({
   age,
   city,
   reason,
-  description,            // <<< NOUVEAU
+  description,
   size = CARD_W,
   editable = true,
   rarity = 'bronze',
   onChangeReason,
-  onPhotoPress,           // <<< NOUVEAU
-  photoHitSlop,           // <<< NOUVEAU
+  onPhotoPress,
+  mediaRatio,
+  photoPadding,
+  touchInset,
 }: Props) {
-  /* --- Dimensions carte --- */
+  /* --- dimensions calculées --- */
   const width = size;
   const height = (CARD_H / CARD_W) * size;
-  const mediaH = height * MEDIA_RATIO;
+  const ratio  = typeof mediaRatio === 'number' ? mediaRatio : MEDIA_RATIO;
+  const pPad   = typeof photoPadding === 'number' ? photoPadding : PHOTO_PADDING;
+  const inset  = { ...TOUCH_INSET, ...(touchInset || {}) } as Required<Insets>;
+  const mediaH = height * ratio;
 
-  /* --- Texte statique (préfixe) --- */
+  /* --- grammaire & meta --- */
   const g = (GRAMMAR as any)[element] || {};
   const verb = g?.plural ? 'me correspondent car' : 'me correspond car';
   const prefix = `${g?.article}${g?.apostrophe ? '' : ' '}${g?.noun} ${verb}`;
 
-  /* --- Meta (âge · ville) --- */
   const meta = useMemo(() => {
     const p: string[] = [];
     if (age != null) p.push(String(age));
@@ -92,32 +111,31 @@ export default function ProfileCard({
     return p.join(' · ');
   }, [age, city]);
 
-  /* --- Dégradé de l’élément (fond de TOUTE la carte) --- */
   const elementColors = useMemo<[string, string]>(
-    () => (ELEMENTS[element]?.gradient ?? ['#222', '#111']) as [string, string],
+    () => (ELEMENTS[element]?.gradient ?? ['#1b2630', '#0e1720']) as [string, string],
     [element]
   );
 
-  /* --- Mesure des lignes du préfixe --- */
+  /* --- état texte --- */
+  const initialText = reason ?? description ?? '';
+  const [text, setText] = useState(initialText);
   const [prefixLines, setPrefixLines] = useState(1);
+  const [atCapacity, setAtCapacity] = useState(false);
+  const acceptedRef = useRef(text);
+  const prevRef = useRef(text);
+
   const onPrefixLayout = useCallback((e: any) => {
     const lines = e?.nativeEvent?.lines as Array<{ text: string }> | undefined;
     if (lines?.length) setPrefixLines(lines.length);
   }, []);
 
-  /* --- Lignes réservées à l’utilisateur --- */
-  const inputMaxLines = Math.max(1, TOTAL_LINES_MAX - prefixLines); // au moins 1 ligne pour éviter blocages
-  const usableWidthInsideBox = width - 2 * PAD_SIDE - 2 * 10;       // 10 = padding horizontal de la box
+  const inputMaxLines = useMemo(
+    () => Math.max(1, TOTAL_LINES_MAX - prefixLines),
+    [prefixLines]
+  );
+  const usableWidthInsideBox = width - 2 * PAD_SIDE - 2 * 10;
   const inputFixedHeight = inputMaxLines * REASON_LINE_HEIGHT;
 
-  /* --- Saisie protégée (jamais d’effacement total) --- */
-  const initialText = (reason ?? description ?? ''); // <<< priorité à reason, sinon description
-  const [text, setText] = useState(initialText);
-  const [atCapacity, setAtCapacity] = useState(false);
-  const acceptedRef = useRef(text);    // dernier texte valide
-  const prevRef = useRef(text);        // snapshot avant la frappe
-
-  // réinitialiser la protection si la place utile change (ex: le préfixe passe sur 2 lignes)
   useEffect(() => {
     acceptedRef.current = text;
     prevRef.current = text;
@@ -125,31 +143,25 @@ export default function ProfileCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputMaxLines]);
 
-  // hydrate à partir de reason/description (pour affichage Supabase)
   useEffect(() => {
-    const base = (reason ?? description ?? '');
+    const base = reason ?? description ?? '';
     setText(base);
     acceptedRef.current = base;
     prevRef.current = base;
     setAtCapacity(false);
   }, [reason, description]);
 
-  const onChangeText = useCallback(
-    (next: string) => {
-      if (!editable) return;
-      prevRef.current = text;
-      setText(next); // on laisse React recalculer la hauteur, le blocage se fait dans onContentSizeChange
-    },
-    [editable, text]
-  );
+  const onChangeText = useCallback((next: string) => {
+    if (!editable) return;
+    prevRef.current = text;
+    setText(next);
+  }, [editable, text]);
 
   const onContentSizeChange = useCallback(
     (e: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
       const h = e?.nativeEvent?.contentSize?.height ?? 0;
       const lines = Math.max(1, Math.round(h / REASON_LINE_HEIGHT));
-
       if (lines <= inputMaxLines) {
-        // OK : on valide ce texte
         if (text !== acceptedRef.current) {
           acceptedRef.current = text;
           onChangeReason?.(text);
@@ -157,217 +169,218 @@ export default function ProfileCard({
         setAtCapacity(lines === inputMaxLines);
         return;
       }
-
-      // Dépassement : on revient au snapshot d’avant la frappe (sans jamais vider)
       const revert = prevRef.current ?? acceptedRef.current ?? '';
-      if (revert !== text) {
-        setText(revert);
-        setAtCapacity(true);
-      } else {
-        setAtCapacity(true);
-      }
+      if (revert !== text) setText(revert);
+      setAtCapacity(true);
     },
     [inputMaxLines, text, onChangeReason]
   );
 
-  const onKeyPress = useCallback(
-    (e: any) => {
-      if (!editable) return;
-      if (e?.nativeEvent?.key === 'Enter' && atCapacity) {
-        // on empêche d’aller à la 7e ligne
-        e.preventDefault?.();
-      }
-    },
-    [editable, atCapacity]
+  const onKeyPress = useCallback((e: any) => {
+    if (!editable) return;
+    if (e?.nativeEvent?.key === 'Enter' && atCapacity) e.preventDefault?.();
+  }, [editable, atCapacity]);
+
+  const showEauBg = element === 'Eau';
+
+  // Empêche juste la propagation sur web
+  const webStopProps =
+    Platform.OS === 'web'
+      ? ({ onClickCapture: (e: any) => { e.stopPropagation(); } } as any)
+      : {};
+
+  // Style d'overlay basé sur des insets absolus
+  const overlayStyle = useMemo(
+    () => ({
+      position: 'absolute' as const,
+      top:    inset.top    ?? 0,
+      left:   inset.left   ?? 0,
+      right:  inset.right  ?? 0,
+      bottom: inset.bottom ?? 0,
+    }),
+    [inset.top, inset.left, inset.right, inset.bottom]
   );
 
-  const borderColor = RARITY[rarity].border;
-
-  /* --- Render --- */
   return (
     <View style={{ width, alignItems: 'center' }}>
-      <View style={[styles.card, { width, height, borderColor }]}>
-        {/* Fond uni piloté par l’élément */}
-        <LinearGradient
-          colors={elementColors}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
+      <View style={[styles.cardWrapper, { width, height }]}>
+        <View style={[styles.card, { width, height, borderRadius: FRAME_RADIUS }]}>
+          {/* fond dégradé par élément */}
+          <LinearGradient
+            colors={elementColors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
 
-        {/* Bandeau (élément + rareté) */}
-        <View style={styles.topChips}>
-          <View style={styles.elementChip}>
-            <Text style={styles.elementTxt}>
-              {g?.article}
-              {g?.apostrophe ? '' : ' '}
-              {g?.noun?.toLowerCase()}
-            </Text>
-          </View>
-          <View style={styles.badge}>
-            <Text style={styles.badgeTxt}>{rarity.toUpperCase()}</Text>
-          </View>
-        </View>
-
-        {/* Zone photo — Pressable strictement limité à la zone */}
-        <View style={{ height: mediaH, paddingHorizontal: 8, paddingBottom: 8, paddingTop: 4 }}>
-          <Pressable
-            disabled={!onPhotoPress}
-            onPress={onPhotoPress}
-            hitSlop={
-              photoHitSlop ??
-              { top: 4, bottom: 4, left: 4, right: 4 } // zone de clic discrète
-            }
-            style={{ flex: 1, borderRadius: 12, overflow: 'hidden' }}
-          >
-            {avatarUrl ? (
+          {/* texture “eau” */}
+          {showEauBg && (
+            <View
+              pointerEvents="none"
+              style={[StyleSheet.absoluteFill, { borderRadius: FRAME_RADIUS, overflow: 'hidden' }]}
+            >
               <Image
-                source={{ uri: avatarUrl }}
+                source={{ uri: EAU_BG_URL }}
                 resizeMode="cover"
-                style={{ flex: 1, borderRadius: 12, width: '100%', borderWidth: StyleSheet.hairlineWidth, borderColor }}
+                style={[
+                  StyleSheet.absoluteFillObject,
+                  { top: -8, bottom: -8, left: -8, right: -8, transform: [{ scale: 1.08 }], opacity: 0.5 },
+                ]}
               />
-            ) : (
-              <View style={[styles.photoPh, { borderColor }]}>
-                <Text style={{ color: '#eedfd7' }}>Photo ?</Text>
-              </View>
-            )}
-          </Pressable>
-        </View>
+            </View>
+          )}
 
-        {/* Bas de carte */}
-        <View style={{ paddingHorizontal: PAD_SIDE, paddingTop: 8, flex: 1 }}>
-          <Text style={styles.name}>{displayName || 'Moi'}</Text>
-          {!!meta && <Text style={styles.meta}>{meta}</Text>}
+          {/* glacis */}
+          <LinearGradient
+            pointerEvents="none"
+            colors={['transparent', 'rgba(0,0,0,0.08)']}
+            start={{ x: 0, y: 0.7 }}
+            end={{ x: 0, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
 
-          {/* Encadré raison */}
-          <View style={styles.reasonBox}>
-            <View style={{ width: usableWidthInsideBox }}>
-              <Text style={[styles.prefix, WEB_TEXT]} onTextLayout={onPrefixLayout}>
-                {prefix}
+          {/* chip élément */}
+          <View style={styles.topChips}>
+            <View style={styles.elementChip}>
+              <Text style={styles.elementTxt}>
+                {g?.article}
+                {g?.apostrophe ? '' : ' '}
+                {g?.noun?.toLowerCase()}
               </Text>
+            </View>
+          </View>
 
-              {/* Si non editable, on affiche un <Text> simple pour un rendu plus propre */}
-              {editable ? (
-                <TextInput
-                  value={text}
-                  onChangeText={onChangeText}
-                  onContentSizeChange={onContentSizeChange}
-                  onKeyPress={onKeyPress}
-                  editable
-                  multiline
-                  numberOfLines={inputMaxLines}       // hauteur visuelle fixée
-                  scrollEnabled={false}
+          {/* === ZONE PHOTO === */}
+          <View style={{ height: mediaH, paddingHorizontal: pPad, paddingBottom: 8, paddingTop: 4 }}>
+            {/* WRAP non clipé, position:relative (reçoit l'overlay) */}
+            <View style={{ flex: 1, position: 'relative' }} {...webStopProps}>
+              {/* CLIP arrondi qui contient l'image */}
+              <View style={{ flex: 1, borderRadius: 12, overflow: 'hidden' }}>
+                {avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} resizeMode="cover" style={{ flex: 1, width: '100%' }} />
+                ) : (
+                  <View style={styles.photoPh}><Text style={{ color: '#eedfd7' }}>Photo ?</Text></View>
+                )}
+              </View>
+
+              {/* OVERLAY cliquable posé avec des INSETS (top/left/right/bottom) */}
+              <Pressable
+                style={[StyleSheet.absoluteFillObject, overlayStyle, { zIndex: 12 }]}
+                onPress={onPhotoPress}
+                android_ripple={Platform.OS === 'android' ? { color: 'rgba(255,255,255,0.08)' } : undefined}
+                {...webStopProps}
+              />
+
+              {DEBUG_TOUCH_SHOW && (
+                <View
+                  pointerEvents="none"
                   style={[
-                    styles.reasonInput,
-                    WEB_TEXT,
-                    {
-                      width: usableWidthInsideBox,
-                      height: inputFixedHeight,
-                      maxHeight: inputFixedHeight,
-                      overflow: 'hidden',
-                    },
-                    Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : undefined,
-                    atCapacity ? { borderColor, borderWidth: 1 } : null,
+                    StyleSheet.absoluteFillObject,
+                    overlayStyle,
+                    { backgroundColor: 'rgba(255,0,0,0.22)', borderWidth: 1, borderColor: 'red', borderRadius: 6, zIndex: 11 },
                   ]}
-                  placeholder="Écrivez ici…"
-                  placeholderTextColor={atCapacity ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.6)'}
                 />
-              ) : (
-                <Text
-                  style={[
-                    styles.reasonReadonly,
-                    WEB_TEXT,
-                    { width: usableWidthInsideBox, minHeight: inputFixedHeight, lineHeight: REASON_LINE_HEIGHT },
-                  ]}
-                  numberOfLines={inputMaxLines}
-                >
-                  {text?.trim().length ? text : 'Écrivez ici…'}
-                </Text>
               )}
             </View>
           </View>
 
-          <View style={{ flex: 1 }} />
+          {/* === TEXTE === */}
+          <View style={{ paddingHorizontal: PAD_SIDE, paddingTop: 8, flex: 1 }}>
+            <Text style={styles.name}>{displayName || 'Moi'}</Text>
+            {!!meta && <Text style={styles.meta}>{meta}</Text>}
+
+            <View style={styles.reasonBox}>
+              <View style={{ width: usableWidthInsideBox }}>
+                <Text style={[styles.prefix, WEB_TEXT]} onTextLayout={onPrefixLayout}>{prefix}</Text>
+
+                {editable ? (
+                  <TextInput
+                    value={text}
+                    onChangeText={onChangeText}
+                    onContentSizeChange={onContentSizeChange}
+                    onKeyPress={onKeyPress}
+                    editable
+                    multiline
+                    numberOfLines={inputMaxLines}
+                    scrollEnabled={false}
+                    style={[
+                      styles.reasonInput,
+                      WEB_TEXT,
+                      {
+                        width: usableWidthInsideBox,
+                        height: inputFixedHeight,
+                        maxHeight: inputFixedHeight,
+                        overflow: 'hidden',
+                      },
+                      Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : undefined,
+                    ]}
+                    placeholder="Écrivez ici…"
+                    placeholderTextColor="rgba(255,255,255,0.6)"
+                  />
+                ) : (
+                  <Text
+                    style={[
+                      styles.reasonReadonly,
+                      WEB_TEXT,
+                      { width: usableWidthInsideBox, minHeight: inputFixedHeight, lineHeight: REASON_LINE_HEIGHT },
+                    ]}
+                    numberOfLines={inputMaxLines}
+                  >
+                    {text?.trim().length ? text : 'Écrivez ici…'}
+                  </Text>
+                )}
+              </View>
+            </View>
+
+            <View style={{ flex: 1 }} />
+          </View>
         </View>
+
+        {/* bordure rareté */}
+        <RarityBorder
+          rarity={rarity}
+          width={width}
+          height={height}
+          radius={FRAME_RADIUS}
+          strokeW={FRAME_STROKE}
+          inset={FRAME_INSET}
+          showBadge
+          badgeText={rarity.toUpperCase()}
+          badgeAlign="right"
+          badgeOffset={{ top: 8, side: 10 }}
+        />
       </View>
     </View>
   );
 }
 
-/* --- Styles --- */
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
-    borderWidth: 2,
-    backgroundColor: 'transparent',
-    overflow: 'hidden',
-  },
+  cardWrapper: { position: 'relative' },
+  card: { overflow: 'hidden', borderWidth: 0, borderRadius: 16, backgroundColor: '#0b1016' },
+
   topChips: {
-    height: 36,
-    paddingHorizontal: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    height: 36, paddingHorizontal: 10, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'space-between',
   },
   elementChip: {
-    backgroundColor: 'rgba(0,0,0,0.24)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(0,0,0,0.24)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 0,
   },
   elementTxt: { color: '#fff', fontWeight: '800', fontSize: 12 },
-  badge: { backgroundColor: '#fff', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeTxt: { color: '#000', fontWeight: '900', fontSize: 12 },
 
   photoPh: {
-    flex: 1,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flex: 1, borderRadius: 12, borderWidth: 0, backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center', justifyContent: 'center',
   },
 
   name: { color: '#fff', fontWeight: '800', fontSize: 16 },
   meta: { color: 'rgba(255,255,255,0.85)', marginTop: 2 },
 
-  reasonBox: {
-    marginTop: 8,
-    backgroundColor: 'rgba(0,0,0,0.20)',
-    borderColor: 'rgba(0,0,0,0.25)',
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  prefix: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: REASON_FONT_SIZE,
-    lineHeight: REASON_LINE_HEIGHT,
-    fontFamily: FONT_FAMILY,
-    marginBottom: 4,
-  },
+  reasonBox: { marginTop: 8, backgroundColor: 'rgba(0,0,0,0.20)', borderWidth: 0, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8 },
+  prefix: { color: '#fff', fontWeight: '700', fontSize: REASON_FONT_SIZE, lineHeight: REASON_LINE_HEIGHT, fontFamily: FONT_FAMILY, marginBottom: 4 },
   reasonInput: {
-    color: '#ffffff',
-    fontSize: REASON_FONT_SIZE,
-    lineHeight: REASON_LINE_HEIGHT,
-    textAlignVertical: 'top',
-    fontFamily: FONT_FAMILY,
-    includeFontPadding: false,
-    paddingTop: 0,
-    paddingRight: 0,
-    paddingBottom: 0,
-    paddingLeft: 0,
-    backgroundColor: 'transparent',
-    borderWidth: 0,
+    color: '#fff', fontSize: REASON_FONT_SIZE, lineHeight: REASON_LINE_HEIGHT, textAlignVertical: 'top',
+    fontFamily: FONT_FAMILY, includeFontPadding: false, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+    backgroundColor: 'transparent', borderWidth: 0,
   },
-  reasonReadonly: {
-    color: '#ffffff',
-    fontSize: REASON_FONT_SIZE,
-    fontFamily: FONT_FAMILY,
-    opacity: 0.95,
-  },
+  reasonReadonly: { color: '#fff', fontSize: REASON_FONT_SIZE, fontFamily: FONT_FAMILY, opacity: 0.95 },
 });

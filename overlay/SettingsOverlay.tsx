@@ -6,32 +6,26 @@ import { supabase } from "../SupabaseClient";
 
 type Ctx = { open: boolean; setOpen: (v: boolean) => void };
 const OverlayCtx = createContext<Ctx | null>(null);
+
 export const useSettingsOverlay = () => {
   const ctx = useContext(OverlayCtx);
   if (!ctx) throw new Error("useSettingsOverlay must be used inside SettingsOverlayProvider");
   return ctx;
 };
 
-type Props = { children: React.ReactNode; hideFloatingButton?: boolean };
+type ProviderProps = { children: React.ReactNode };
 
-const SettingsOverlayProvider: React.FC<Props> = ({ children, hideFloatingButton }) => {
+/**
+ * Provider = gère l'état + l'overlay. Ne rend PAS le bouton.
+ * Place ce provider uniquement là où tu veux permettre l’overlay (ex: AccueilConnected).
+ */
+const SettingsOverlayProvider: React.FC<ProviderProps> = ({ children }) => {
   const [open, setOpen] = useState(false);
 
   return (
     <OverlayCtx.Provider value={{ open, setOpen }}>
       <View style={{ flex: 1 }}>
         {children}
-
-        {!hideFloatingButton && (
-          <Pressable
-            testID="open-settings-overlay"
-            accessibilityLabel="Ouvrir les paramètres"
-            onPress={() => setOpen(true)}
-            style={styles.fab}
-          >
-            <Settings size={18} color="#0a0f14" />
-          </Pressable>
-        )}
 
         {open && (
           <View style={styles.overlay} pointerEvents="auto">
@@ -68,11 +62,28 @@ const SettingsOverlayProvider: React.FC<Props> = ({ children, hideFloatingButton
 
 export default SettingsOverlayProvider;
 
+/**
+ * Bouton flottant séparé : place-le UNIQUEMENT dans AccueilConnected.
+ */
+export const SettingsFab: React.FC = () => {
+  const { setOpen } = useSettingsOverlay();
+  return (
+    <Pressable
+      testID="open-settings-overlay"
+      accessibilityLabel="Ouvrir les paramètres"
+      onPress={() => setOpen(true)}
+      style={styles.fab}
+    >
+      <Settings size={18} color="#0a0f14" />
+    </Pressable>
+  );
+};
+
 const styles = StyleSheet.create({
   fab: {
     position: "absolute",
-    top: 14,
-    right: 14,
+    top: 6,
+    right: 1,
     zIndex: 9999,
     width: 36,
     height: 36,

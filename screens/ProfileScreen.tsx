@@ -19,13 +19,8 @@ import ProfileCard from "../card/cards/ProfileCard";
 
 const CARD_CREATION_ROUTE = "CardCreationScreen";
 
-// --- Hitbox de la photo (si tu bouges la mise en page de ProfileCard, ajuste ici) ---
-const CARD_W = 320;
-const PADDING_INNER = 12;
-const TOPBAR_H = 28;
-const GAP_TOPBAR_TO_PHOTO = 10;
-const PHOTO_TOP = PADDING_INNER + TOPBAR_H + GAP_TOPBAR_TO_PHOTO; // ~50px
-const PHOTO_H = 220;
+// 👉 Règle ici la zone cliquable de la photo pour **l’écran Profil**
+const PHOTO_TOUCH_INSET = { top: 6, right: 10, bottom: 10, left: 10 };
 
 // --- Supabase Storage ---
 const STORAGE_BUCKET = "images";
@@ -102,12 +97,16 @@ export default function ProfileScreen() {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission", "Autorise l’accès à la galerie pour choisir une photo.");
+        Alert.alert(
+          "Permission",
+          "Autorise l’accès à la galerie pour choisir une photo."
+        );
         return;
       }
       const res = await ImagePicker.launchImageLibraryAsync({
-        // (warning deprecation in console mais ça marche; tu peux passer au nouvel enum si tu veux)
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes:
+          (ImagePicker as any).MediaType?.Images ??
+          ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: false,
         quality: 0.9,
       });
@@ -149,7 +148,8 @@ export default function ProfileScreen() {
     }
   }, []);
 
-  const hasPendingChange = !!draftPhotoUrl && draftPhotoUrl !== (profile?.photo_url ?? undefined);
+  const hasPendingChange =
+    !!draftPhotoUrl && draftPhotoUrl !== (profile?.photo_url ?? undefined);
 
   const onCancel = useCallback(() => {
     setDraftPhotoUrl(undefined);
@@ -167,7 +167,7 @@ export default function ProfileScreen() {
         .update({ photo_url: uploaded })
         .eq("id", profile.id)
         .select()
-      .single();
+        .single();
 
       if (dbErr) throw dbErr;
 
@@ -216,7 +216,7 @@ export default function ProfileScreen() {
     );
   }
 
-  // Props passées à la carte (on passe bien la description pour l'afficher dans la zone)
+  // ⬇️ On passe bien touchInset ici (c’est CET écran que tu regardes)
   const cardProps = {
     element: (profile.element ?? "Feu") as any,
     rarity: (profile.rarity ?? "bronze") as any,
@@ -224,7 +224,9 @@ export default function ProfileScreen() {
     displayName: profile.username ?? "Moi",
     age: profile.age ?? undefined,
     city: profile.city ?? undefined,
-    description: profile.description ?? undefined, // <<< IMPORTANT : affichage dans la carte
+    description: profile.description ?? undefined,
+    onPhotoPress: selectPhoto,
+    touchInset: PHOTO_TOUCH_INSET, // 👈 modifie ces valeurs et la zone rouge bougera
   } as any;
 
   return (
@@ -240,25 +242,10 @@ export default function ProfileScreen() {
           <Text style={styles.title}>Mon profil</Text>
         </View>
 
-        {/* Carte + overlay de clic pour la photo */}
+        {/* Carte SANS overlay de clic */}
         <View style={{ alignItems: "center", marginTop: 6 }}>
-          <View style={{ width: CARD_W }}>
+          <View style={{ width: 320 }}>
             <ProfileCard {...cardProps} />
-            <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-              <Pressable
-                onPress={selectPhoto}
-                style={{
-                  position: "absolute",
-                  top: PHOTO_TOP,
-                  left: PADDING_INNER,
-                  right: PADDING_INNER,
-                  height: PHOTO_H,
-                }}
-                android_ripple={
-                  Platform.OS === "android" ? { color: "rgba(255,255,255,0.08)" } : undefined
-                }
-              />
-            </View>
           </View>
         </View>
 
@@ -288,11 +275,7 @@ const styles = StyleSheet.create({
   muted: { color: "rgba(255,255,255,0.7)", marginTop: 8 },
   error: { color: "#ffd5d5", textAlign: "center" },
 
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
+  headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
   title: { color: "#fff", fontSize: 18, fontWeight: "800" },
 
   primaryBtn: {
@@ -304,24 +287,13 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: { color: "#fff", fontWeight: "800" },
 
-  actionsRow: {
-    marginTop: 16,
-    flexDirection: "row",
-    gap: 10,
-  },
-  btn: {
-    flex: 1,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
+  actionsRow: { marginTop: 16, flexDirection: "row", gap: 10 },
+  btn: { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: "center" },
   btnCancel: {
     backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255,255,255,0.2)",
   },
-  btnSave: {
-    backgroundColor: "#16a34a",
-  },
+  btnSave: { backgroundColor: "#16a34a" },
   btnTxt: { color: "#fff", fontWeight: "800" },
 });

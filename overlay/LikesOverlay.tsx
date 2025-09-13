@@ -10,6 +10,8 @@ import {
   Platform,
   ScrollView,
   Image,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 import { Heart, X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -31,17 +33,11 @@ export const useLikesOverlay = () => {
 };
 
 /* ----------------------------------------------------
-   Provider
+   Provider (pas de bouton ici)
 ---------------------------------------------------- */
 const nativeDriver = Platform.OS !== "web";
 
-// Doit correspondre au FAB "Paramètres" (⚙️) pour un alignement parfait
-const SETTINGS_TOP_PADDING = 8;      // même top que le bouton ⚙️
-const SETTINGS_RIGHT = 8;            // même right que le bouton ⚙️
-const RESERVED_RIGHT_FOR_SETTINGS = 56; // largeur+espacement réservé pour ⚙️ (ajuste si besoin)
-
 export default function LikesOverlayProvider({ children }: { children: React.ReactNode }) {
-  const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
 
   // Animations
@@ -76,31 +72,12 @@ export default function LikesOverlayProvider({ children }: { children: React.Rea
 
   const value = useMemo<Ctx>(() => ({ openLikes, closeLikes, isOpen: open }), [openLikes, closeLikes, open]);
 
-  const topAligned = insets.top + SETTINGS_TOP_PADDING;
-
   return (
     <LikesOverlayContext.Provider value={value}>
       {/* 1) Contenu de l’app */}
       {children}
 
-      {/* 2) Bouton flottant (cœur), aligné sur la même ligne que ⚙️ */}
-      <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-        <Pressable
-          onPress={openLikes}
-          style={[
-            styles.fab,
-            {
-              top: topAligned,                 // même top que ⚙️
-              right: RESERVED_RIGHT_FOR_SETTINGS, // on réserve la place pour ⚙️ (qui est à right: 8)
-            },
-          ]}
-          hitSlop={8}
-        >
-          <Heart size={18} color="#fff" />
-        </Pressable>
-      </View>
-
-      {/* 3) Calque + feuille Likes */}
+      {/* 2) Calque + feuille Likes (affichée si open) */}
       {open && (
         <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
           {/* overlay */}
@@ -125,7 +102,6 @@ export default function LikesOverlayProvider({ children }: { children: React.Rea
               </Pressable>
             </View>
 
-            {/* Contenu démo un peu plus "riche" */}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -165,7 +141,42 @@ export default function LikesOverlayProvider({ children }: { children: React.Rea
 }
 
 /* ----------------------------------------------------
-   Données de démo (images libres Unsplash)
+   FAB séparé (positionnable par écran)
+---------------------------------------------------- */
+type LikesFabProps = {
+  style?: StyleProp<ViewStyle>;
+  /** Si true, s’aligne automatiquement sur le ⚙️ (haut-droite, même top/right). */
+  alignWithSettings?: boolean;
+};
+
+export const LikesFab: React.FC<LikesFabProps> = ({ style, alignWithSettings }) => {
+  const { openLikes } = useLikesOverlay();
+  const insets = useSafeAreaInsets();
+
+  // Valeurs par défaut (haut-droite)
+  const DEFAULT_TOP = 13;
+  const DEFAULT_RIGHT = 64; // on laisse de la place pour le ⚙️ (≈ 36px + marge)
+
+  // Si alignWithSettings: caler au même niveau que ⚙️ en respectant la safe-area
+  const autoAlignedStyle: StyleProp<ViewStyle> | undefined = alignWithSettings
+    ? { top: insets.top + DEFAULT_TOP, right: DEFAULT_RIGHT }
+    : undefined;
+
+  return (
+    <Pressable
+      onPress={openLikes}
+      accessibilityLabel="Ouvrir les likes"
+      testID="open-likes-overlay"
+      style={[styles.fab, autoAlignedStyle, style]}
+      hitSlop={8}
+    >
+      <Heart size={18} color="#fff" />
+    </Pressable>
+  );
+};
+
+/* ----------------------------------------------------
+   Données de démo
 ---------------------------------------------------- */
 const demoPeople = [
   {
@@ -192,8 +203,11 @@ const demoPeople = [
    Styles
 ---------------------------------------------------- */
 const styles = StyleSheet.create({
+  // Position absolue par défaut (haut-droite)
   fab: {
     position: "absolute",
+    top: 13,
+    right: 64, // laisse la place pour le ⚙️
     backgroundColor: "rgba(255,255,255,0.12)",
     borderColor: "rgba(255,255,255,0.18)",
     borderWidth: StyleSheet.hairlineWidth,
