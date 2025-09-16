@@ -11,21 +11,28 @@ import {
   SafeAreaView,
   Alert,
   Platform,
+  Image as RNImage,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
+import * as ImageManipulator from "expo-image-manipulator";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { supabase } from "../SupabaseClient";
 import ProfileCard from "../card/cards/ProfileCard";
+import PhotoCropModal, { CropState } from "../overlay/PhotoCropModal";
 
+/* ================== Constantes ================== */
 const CARD_CREATION_ROUTE = "CardCreationScreen";
-
-// 👉 Règle ici la zone cliquable de la photo pour **l’écran Profil**
 const PHOTO_TOUCH_INSET = { top: 6, right: 10, bottom: 10, left: 10 };
 
-// --- Supabase Storage ---
 const STORAGE_BUCKET = "images";
 const STORAGE_DIR = "profiles";
 
+/** 👉 Taille de la fenêtre de recadrage (doit matcher la zone photo de ta carte) */
+const FRAME_W = 280;
+const FRAME_H = 280; // mets une autre valeur si ta fenêtre n'est pas carrée
+
+/* ================== Types ================== */
 type DBProfile = {
   id: string;
   onboarding_completed: boolean | null;
@@ -38,6 +45,43 @@ type DBProfile = {
   username: string | null;
 };
 
+/* ================== Helpers ================== */
+function devineTypeContenu(uri: string) {
+  const lower = uri.split("?")[0].toLowerCase();
+  const m = lower.match(/\.([a-z0-9]+)$/);
+  const ext = m?.[1] ?? "";
+  switch (ext) {
+    case "jpg":
+    case "jpeg":
+      return { mime: "image/jpeg", ext: "jpg" };
+    case "png":
+      return { mime: "image/png", ext: "png" };
+    case "webp":
+      return { mime: "image/webp", ext: "webp" };
+    case "heic":
+      return { mime: "image/heic", ext: "heic" };
+    case "heif":
+      return { mime: "image/heif", ext: "heif" };
+    default:
+      return { mime: "image/jpeg", ext: "jpg" };
+  }
+}
+
+/** URI image -> ArrayBuffer (web + iOS/Android), sans Blob. */
+async function arrayBufferDepuisUri(uri: string, contentType: string): Promise<ArrayBuffer> {
+  if (Platform.OS === "web") {
+    const res = await fetch(uri);
+    if (!res.ok) throw new Error("Impossible de lire l’image (web).");
+    return await res.arrayBuffer();
+  }
+  const b64 = await FileSystem.readAsStringAsync(uri, { encoding: "base64" });
+  const dataUrl = `data:${contentType};base64,${b64}`;
+  const res = await fetch(dataUrl);
+  if (!res.ok) throw new Error("Impossible de lire l’image (natif).");
+  return await res.arrayBuffer();
+}
+
+/* ================== Écran ================== */
 export default function ProfileScreen() {
   const nav = useNavigation<any>();
 
@@ -46,11 +90,16 @@ export default function ProfileScreen() {
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<DBProfile | null>(null);
 
-  // Preview avant enregistrement
-  const [draftPhotoUrl, setDraftPhotoUrl] = useState<string | undefined>();
+  // Preview (locale) & états de workflow
+  const [previewUri, setPreviewUri] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
 
-  const fetchProfile = useCallback(async () => {
+  // Recadrage (modal)
+  const [cropVisible, setCropVisible] = useState(false);
+  const [pickedUri, setPickedUri] = useState<string | null>(null);
+
+  /* ---- Charger le profil ---- */
+  const chargerProfil = useCallback(async () => {
     setError(null);
     try {
       const { data: auth } = await supabase.auth.getUser();
@@ -70,7 +119,7 @@ export default function ProfileScreen() {
 
       if (error) throw error;
       setProfile(data as DBProfile);
-      setDraftPhotoUrl(undefined); // reset preview locale
+      setPreviewUri(undefined);
     } catch (e: any) {
       setError(e?.message ?? "Impossible de charger le profil");
       setProfile(null);
@@ -82,106 +131,137 @@ export default function ProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
-      fetchProfile();
-    }, [fetchProfile])
+      chargerProfil();
+    }, [chargerProfil])
   );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchProfile();
+    await chargerProfil();
     setRefreshing(false);
-  }, [fetchProfile]);
+  }, [chargerProfil]);
 
-  // --- Sélection image (preview immédiate) ---
-  const selectPhoto = useCallback(async () => {
+  /* ---- Upload vers Supabase Storage ---- */
+  const uploaderAvatarSiBesoin = useCallback(async (uri?: string) => {
+    if (!uri) return null;
+    if (/^https?:\/\//i.test(uri)) return uri; // déjà hébergée
+
+    const { data: { user }, error: authErr } = await supabase.auth.getUser();
+    if (authErr) throw authErr;
+    if (!user?.id) throw new Error("Utilisateur non authentifié.");
+
+    const { mime: contentType, ext } = devineTypeContenu(uri);
+    const fileName = `profile_${Date.now()}.${ext}`;
+    const path = `${user.id}/${STORAGE_DIR}/${fileName}`;
+
+    const buffer = await arrayBufferDepuisUri(uri, contentType);
+
+    const { error: upErr } = await supabase
+      .storage
+      .from(STORAGE_BUCKET)
+      .upload(path, buffer, { contentType, upsert: true });
+    if (upErr) throw upErr;
+
+    const pub = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path).data?.publicUrl;
+    const { data: signed } = await supabase
+      .storage
+      .from(STORAGE_BUCKET)
+      .createSignedUrl(path, 60 * 60 * 24 * 365);
+    return signed?.signedUrl ?? pub ?? null;
+  }, []);
+
+  /* ---- Choisir une photo → ouvrir le modal de recadrage ---- */
+  const choisirPhoto = useCallback(async () => {
     try {
+      if (saving) return;
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
-          "Permission",
-          "Autorise l’accès à la galerie pour choisir une photo."
-        );
+        Alert.alert("Permission requise", "Autorise l’accès à la galerie pour choisir une photo.");
         return;
       }
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes:
           (ImagePicker as any).MediaType?.Images ??
           ImagePicker.MediaTypeOptions.Images,
-        allowsMultipleSelection: false,
         quality: 0.9,
       });
-      if (!res.canceled && res.assets?.[0]?.uri) {
-        setDraftPhotoUrl(res.assets[0].uri); // preview locale
-      }
+      if (res.canceled || !res.assets?.[0]?.uri) return;
+
+      setPickedUri(res.assets[0].uri);
+      setCropVisible(true); // → l’utilisateur recadre, puis on valide
     } catch {
       Alert.alert("Oups", "Impossible de sélectionner l’image.");
     }
-  }, []);
+  }, [saving]);
 
-  // --- Upload vers Storage si nécessaire ---
-  const uploadAvatarIfNeeded = useCallback(async (uri?: string) => {
-    if (!uri) return null;
-    if (/^https?:\/\//i.test(uri)) return uri; // déjà public (pas d'upload)
+  /* ---- Appliquer le crop venant du modal ---- */
+  async function appliquerCropEtSauver(srcUri: string, crop: CropState) {
+    // 1) Obtenir la taille d’origine de l’image
+    const { width: imgW, height: imgH } = await new Promise<{ width: number; height: number }>((resolve) => {
+      RNImage.getSize(srcUri, (w, h) => resolve({ width: w, height: h }), () => resolve({ width: 1000, height: 1000 }));
+    });
 
-    try {
-      const { data: auth } = await supabase.auth.getUser();
-      const userId = auth.user?.id;
-      if (!userId) return null;
+    const s = crop.scale;
+    const tx = crop.translateX;
+    const ty = crop.translateY;
 
-      const res = await fetch(uri);
-      const blob = await res.blob();
-      const mime = blob.type || "image/jpeg";
-      const ext = (mime.split("/")[1] ?? "jpg").replace("+xml", "").replace("+json", "");
-      const path = `${STORAGE_DIR}/${userId}-${Date.now()}.${ext}`;
+    const displayW = imgW * s;
+    const displayH = imgH * s;
 
-      const { error: upErr } = await supabase
-        .storage
-        .from(STORAGE_BUCKET)
-        .upload(path, blob, { upsert: true, contentType: mime });
-      if (upErr) throw upErr;
+    // Formules alignées avec ton modal (voir transform dans PhotoCropModal)
+    // T = tx + (FRAME_W - displayW)/2, left visible = -T
+    const originX = Math.max(0, Math.min(
+      imgW - 1,
+      Math.round(((displayW - FRAME_W) / 2 - tx) / s)
+    ));
+    const originY = Math.max(0, Math.min(
+      imgH - 1,
+      Math.round(((displayH - FRAME_H) / 2 - ty) / s)
+    ));
 
-      const { data: pub } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
-      return pub.publicUrl ?? null;
-    } catch (e) {
-      console.warn("uploadAvatarIfNeeded error:", e);
-      return null;
-    }
-  }, []);
+    const cropWsrc = Math.round(FRAME_W / s);
+    const cropHsrc = Math.round(FRAME_H / s);
 
-  const hasPendingChange =
-    !!draftPhotoUrl && draftPhotoUrl !== (profile?.photo_url ?? undefined);
+    const width = Math.max(1, Math.min(imgW - originX, cropWsrc));
+    const height = Math.max(1, Math.min(imgH - originY, cropHsrc));
 
-  const onCancel = useCallback(() => {
-    setDraftPhotoUrl(undefined);
-  }, []);
+    // 2) Générer l’image recadrée localement
+    const result = await ImageManipulator.manipulateAsync(
+      srcUri,
+      [{ crop: { originX, originY, width, height } }],
+      { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
+    );
 
-  const onSave = useCallback(async () => {
-    if (!profile || !hasPendingChange) return;
+    // 3) Preview immédiate + upload + update DB
+    const ancienneUrl = profile?.photo_url ?? undefined;
+    setPreviewUri(result.uri);
     setSaving(true);
-    try {
-      const uploaded = await uploadAvatarIfNeeded(draftPhotoUrl);
-      if (!uploaded) throw new Error("Upload échoué (vérifie les policies du bucket).");
 
-      const { error: dbErr, data } = await supabase
+    try {
+      const uploadedUrl = await uploaderAvatarSiBesoin(result.uri);
+      if (!uploadedUrl) throw new Error("Upload échoué (bucket/policies).");
+
+      const { data, error: dbErr } = await supabase
         .from("profiles")
-        .update({ photo_url: uploaded })
-        .eq("id", profile.id)
+        .update({ photo_url: uploadedUrl })
+        .eq("id", profile!.id)
         .select()
         .single();
-
       if (dbErr) throw dbErr;
 
       setProfile(data as DBProfile);
-      setDraftPhotoUrl(undefined);
-      Alert.alert("Profil mis à jour", "Ta nouvelle photo est enregistrée.");
+      setPreviewUri(undefined);
+      Alert.alert("Profil mis à jour", "Photo recadrée enregistrée ✅");
     } catch (e: any) {
+      setPreviewUri(undefined);
+      if (ancienneUrl && profile) setProfile({ ...profile, photo_url: ancienneUrl });
       Alert.alert("Oups", e?.message ?? "Échec de l’enregistrement.");
     } finally {
       setSaving(false);
     }
-  }, [profile, hasPendingChange, draftPhotoUrl, uploadAvatarIfNeeded]);
+  }
 
-  // --- états UI ---
+  /* ---- UI ---- */
   if (loading) {
     return (
       <SafeAreaView style={[styles.fill, styles.center]}>
@@ -195,7 +275,7 @@ export default function ProfileScreen() {
     return (
       <SafeAreaView style={[styles.fill, styles.center, { padding: 24 }]}>
         <Text style={styles.error}>{error}</Text>
-        <Pressable onPress={fetchProfile} style={[styles.primaryBtn, { marginTop: 12 }]}>
+        <Pressable onPress={chargerProfil} style={[styles.primaryBtn, { marginTop: 12 }]}>
           <Text style={styles.primaryBtnText}>Réessayer</Text>
         </Pressable>
       </SafeAreaView>
@@ -205,9 +285,7 @@ export default function ProfileScreen() {
   if (!profile || !profile.onboarding_completed) {
     return (
       <SafeAreaView style={[styles.fill, styles.center, { padding: 24 }]}>
-        <Text style={{ color: "#fff", fontSize: 18, fontWeight: "700", marginBottom: 8 }}>
-          Crée ta carte
-        </Text>
+        <Text style={styles.titleLarge}>Crée ta carte</Text>
         <Text style={styles.muted}>Ta carte apparaîtra ici une fois validée ✅</Text>
         <Pressable onPress={() => nav.navigate(CARD_CREATION_ROUTE)} style={styles.primaryBtn}>
           <Text style={styles.primaryBtnText}>Créer ma carte</Text>
@@ -216,17 +294,16 @@ export default function ProfileScreen() {
     );
   }
 
-  // ⬇️ On passe bien touchInset ici (c’est CET écran que tu regardes)
   const cardProps = {
     element: (profile.element ?? "Feu") as any,
     rarity: (profile.rarity ?? "bronze") as any,
-    avatarUrl: (draftPhotoUrl ?? profile.photo_url) ?? undefined,
+    avatarUrl: (previewUri ?? profile.photo_url) ?? undefined,
     displayName: profile.username ?? "Moi",
     age: profile.age ?? undefined,
     city: profile.city ?? undefined,
     description: profile.description ?? undefined,
-    onPhotoPress: selectPhoto,
-    touchInset: PHOTO_TOUCH_INSET, // 👈 modifie ces valeurs et la zone rouge bougera
+    onPhotoPress: choisirPhoto, // ← tap = sélectionner -> recadrer (modal) -> enregistrer auto
+    touchInset: PHOTO_TOUCH_INSET,
   } as any;
 
   return (
@@ -242,33 +319,41 @@ export default function ProfileScreen() {
           <Text style={styles.title}>Mon profil</Text>
         </View>
 
-        {/* Carte SANS overlay de clic */}
         <View style={{ alignItems: "center", marginTop: 6 }}>
           <View style={{ width: 320 }}>
             <ProfileCard {...cardProps} />
           </View>
-        </View>
 
-        {/* Boutons Annuler / Enregistrer (uniquement si une nouvelle photo est sélectionnée) */}
-        {hasPendingChange && (
-          <View style={styles.actionsRow}>
-            <Pressable onPress={onCancel} style={[styles.btn, styles.btnCancel]}>
-              <Text style={styles.btnTxt}>Annuler</Text>
-            </Pressable>
-            <Pressable
-              onPress={saving ? undefined : onSave}
-              style={[styles.btn, styles.btnSave, saving && { opacity: 0.6 }]}
-            >
-              <Text style={styles.btnTxt}>{saving ? "Enregistrement…" : "Enregistrer"}</Text>
-            </Pressable>
-          </View>
-        )}
+          {saving && (
+            <View style={{ marginTop: 10, flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <ActivityIndicator color="#fff" />
+              <Text style={styles.muted}>Enregistrement…</Text>
+            </View>
+          )}
+        </View>
       </ScrollView>
+
+      {/* ------ Modal de recadrage ------ */}
+      <PhotoCropModal
+        visible={cropVisible && !!pickedUri}
+        onClose={() => { setCropVisible(false); setPickedUri(null); }}
+        onConfirm={async (state: CropState) => {
+          const src = pickedUri!;
+          setCropVisible(false);
+          setPickedUri(null);
+          await appliquerCropEtSauver(src, state);
+        }}
+        imageUri={pickedUri ?? ""}
+        frameWidth={FRAME_W}
+        frameHeight={FRAME_H}
+        frameBorderRadius={12}
+        showGrid
+      />
     </SafeAreaView>
   );
 }
 
-/* ---------------- styles ---------------- */
+/* ================== Styles ================== */
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: "#0a0f14" },
   center: { alignItems: "center", justifyContent: "center" },
@@ -277,6 +362,7 @@ const styles = StyleSheet.create({
 
   headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
   title: { color: "#fff", fontSize: 18, fontWeight: "800" },
+  titleLarge: { color: "#fff", fontSize: 18, fontWeight: "700", marginBottom: 8 },
 
   primaryBtn: {
     marginTop: 16,
@@ -286,14 +372,4 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   primaryBtnText: { color: "#fff", fontWeight: "800" },
-
-  actionsRow: { marginTop: 16, flexDirection: "row", gap: 10 },
-  btn: { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: "center" },
-  btnCancel: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.2)",
-  },
-  btnSave: { backgroundColor: "#16a34a" },
-  btnTxt: { color: "#fff", fontWeight: "800" },
 });

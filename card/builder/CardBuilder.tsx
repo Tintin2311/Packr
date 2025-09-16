@@ -181,7 +181,7 @@ export default function CardBuilder({ onValidate }: { onValidate?: (card: CardDr
             age={age ?? undefined}
             city={city}
             onPhotoPress={pickImage} // clic uniquement dans la zone rouge
-            touchInset={{ top: 0, right: 0, bottom: 0, left: 0 }} // ajuste ici pour le builder
+            touchInset={{ top: 6, right: 10, bottom: 10, left: 10 }} // ajuste ici pour le builder
           />
         </View>
 

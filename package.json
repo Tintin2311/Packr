@@ -19,9 +19,8 @@
     "@react-navigation/native": "^7.1.17",
     "@react-navigation/native-stack": "^7.3.25",
     "@supabase/supabase-js": "^2.55.0",
-    "@types/react": "~19.1.10",
     "babel-preset-expo": "~54.0.0",
-    "expo": "^54.0.0",
+    "expo": "^54.0.6",
     "expo-auth-session": "~7.0.8",
     "expo-image-manipulator": "~14.0.7",
     "expo-image-picker": "~17.0.8",
@@ -49,13 +48,16 @@
   },
   "devDependencies": {
     "@react-native-community/cli": "^20.0.0",
-    "@types/react": "~19.0.10",
+    "@types/node": "^22.18.3",
+    "@types/react": "~19.1",
+    "@types/react-dom": "~19.1",
+    "@types/react-native": "^0.72.8",
     "autoprefixer": "^10.4.21",
     "babel-plugin-module-resolver": "^5.0.2",
-    "babel-preset-expo": "~13.0.0",
+    "babel-preset-expo": "~54.0.0",
     "concurrently": "^9.2.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9"
   }
 }

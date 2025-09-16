@@ -1,6 +1,6 @@
 // overlay/SettingsOverlay.tsx
 import React, { createContext, useContext, useState } from "react";
-import { View, Text, Pressable, StyleSheet, SafeAreaView } from "react-native";
+import { View, Text, Pressable, StyleSheet, SafeAreaView, type StyleProp, type ViewStyle } from "react-native";
 import { Settings } from "lucide-react-native";
 import { supabase } from "../SupabaseClient";
 
@@ -17,7 +17,6 @@ type ProviderProps = { children: React.ReactNode };
 
 /**
  * Provider = gère l'état + l'overlay. Ne rend PAS le bouton.
- * Place ce provider uniquement là où tu veux permettre l’overlay (ex: AccueilConnected).
  */
 const SettingsOverlayProvider: React.FC<ProviderProps> = ({ children }) => {
   const [open, setOpen] = useState(false);
@@ -63,16 +62,16 @@ const SettingsOverlayProvider: React.FC<ProviderProps> = ({ children }) => {
 export default SettingsOverlayProvider;
 
 /**
- * Bouton flottant séparé : place-le UNIQUEMENT dans AccueilConnected.
+ * Bouton flottant ⚙️. Peut être repositionné avec la prop `style`.
  */
-export const SettingsFab: React.FC = () => {
+export const SettingsFab: React.FC<{ style?: StyleProp<ViewStyle> }> = ({ style }) => {
   const { setOpen } = useSettingsOverlay();
   return (
     <Pressable
       testID="open-settings-overlay"
       accessibilityLabel="Ouvrir les paramètres"
       onPress={() => setOpen(true)}
-      style={styles.fab}
+      style={[styles.fab, style]}
     >
       <Settings size={18} color="#0a0f14" />
     </Pressable>
@@ -82,8 +81,8 @@ export const SettingsFab: React.FC = () => {
 const styles = StyleSheet.create({
   fab: {
     position: "absolute",
-    top: 6,
-    right: 1,
+    top: 14,
+    right: 14,
     zIndex: 9999,
     width: 36,
     height: 36,

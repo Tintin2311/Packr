@@ -11,12 +11,10 @@
     "resolveJsonModule": true,
     "allowJs": false,
     "baseUrl": ".",
-    "paths": {
-      "@/*": ["./*"]
-    }
-    /* ❌ NE PAS METTRE "types": ["node","react-native"] ici.
-       Laisse TS découvrir automatiquement les types (react sera trouvé via @types/react). */
+    "paths": { "@/*": ["./*"] },
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules", "babel.config.js"]
+  "exclude": ["node_modules", "dist", "babel.config.js"]
 }
